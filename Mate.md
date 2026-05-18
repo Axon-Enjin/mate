@@ -90,7 +90,7 @@ SEA expansion at similar economics adds another **$8.6–21.6M ARR** as a Year 4
 
 ## 4. The technical stack is feasible — and the killer feature is syllabus parsing
 
-The autonomous academic assistant works as a coordinated stack: **LMS data ingestion + AI document parsing + calendar two-way sync + cross-device delivery + offline-first storage**, with Filipino/Taglish voice and text intelligence on top. Every layer is technically achievable in 2026 at sub-cent unit economics.
+The autonomous academic assistant works as a coordinated stack: **LMS data ingestion + AI document parsing (Mistral Document AI with Azure AI Vision Read fallback) + OpenAI GPT-4.1 text generation + calendar two-way sync + cross-device delivery + offline-first storage**, with Filipino/Taglish voice and text intelligence on top. Every layer is technically achievable in 2026 at sub-cent unit economics.
 
 ### LMS reality in Philippine universities
 
@@ -100,7 +100,9 @@ The integration matrix is constrained by institutional gatekeeping. Canvas, Mood
 
 ### Syllabus parsing — the killer feature, technically tractable
 
-The 2025 Dot Square Lab (DSL-QA) document AI benchmark found **vision-language models (GPT-5 Mini, GPT-4.1 Mini, Gemini 2.5 Flash-Lite) now outperform Azure Document Intelligence and Mistral OCR** for layout-aware document parsing — at lower cost. Per-syllabus parsing economics: **Gemini 2.5 Flash-Lite at ~$0.002 per 5-page syllabus**, GPT-4o-mini at $0.02–$0.05. Hallucination on date extraction is the live risk: practitioner reports cite 5–15% error rates unconstrained, dropping to **<2% with structured JSON schemas, retrieval grounding, and explicit "return null if ambiguous" rules**, followed by a human-confirmation step before any calendar write. The recommended pattern is a Gemini 2.5 Flash-Lite primary pass with Azure Document Intelligence fallback for handwritten or low-quality scans, targeting **<$0.01 per syllabus parsed at scale**.
+The 2025 Dot Square Lab (DSL-QA) document AI benchmark found **vision-language models (GPT-5 Mini, GPT-4.1 Mini, Mistral Document AI) now outperform Azure Document Intelligence** for layout-aware document parsing — at lower cost. Per-syllabus parsing economics target **<$0.01 per 5-page syllabus** at scale. Hallucination on date extraction is the live risk: practitioner reports cite 5–15% error rates unconstrained, dropping to **<2% with structured JSON schemas, retrieval grounding, and explicit "return null if ambiguous" rules**, followed by a human-confirmation step before any calendar write. The recommended pattern is a Mistral Document AI primary pass with Azure AI Vision Read fallback for handwritten or low-quality scans.
+
+Edge cases to handle include multi-column layouts, tables with merged cells, conflicting dates across sections, date ranges without a year, "TBA" placeholders, and image-only PDFs that need OCR plus manual confirmation.
 
 ### Filipino language AI is production-ready for text, weaker for voice
 
@@ -108,7 +110,7 @@ Frontier models (GPT-4o, Claude 3.5/4, Gemini 1.5/2) score **above 97% on multil
 
 ### Microsoft Copilot Studio fits — but isn't the whole stack
 
-Copilot Studio's 2025–26 pricing prices at **$0.01 per Copilot Credit**, with prepaid packs of **25,000 credits for $200/month**. A typical agent interaction consumes 5–15 credits depending on generative answers and Graph grounding. Enforcement disables agents at 125% of capacity — plan headroom. A heavily-engaged free user could plausibly cost **$0.50–$2/month in compute alone**, making free-tier model routing (smaller models like Gemini Flash, Llama, Haiku) essential to unit economics. For the Challenge's cross-device requirement, **Direct Line API consumed by a native iOS/Android app plus a PWA for laptop/MacBook** is the cleanest architecture, with Microsoft Graph integration for Calendar, Outlook, OneDrive, and To Do. Power Platform EDU licensing is messy for B2C student apps; building the core SaaS on Azure (App Service + Cosmos DB) and *calling* Copilot Studio agents per-institution is the more flexible long-term pattern.
+Copilot Studio's 2025–26 pricing prices at **$0.01 per Copilot Credit**, with prepaid packs of **25,000 credits for $200/month**. A typical agent interaction consumes 5–15 credits depending on generative answers and Graph grounding. Enforcement disables agents at 125% of capacity — plan headroom. A heavily-engaged free user could plausibly cost **$0.50–$2/month in compute alone**, making free-tier model routing (smaller models like Mistral Small, Llama, Haiku) essential to unit economics. For the Challenge's cross-device requirement, **Direct Line API consumed by a native iOS/Android app plus a PWA for laptop/MacBook** is the cleanest architecture, with Microsoft Graph integration for Calendar, Outlook, OneDrive, and To Do. Power Platform EDU licensing is messy for B2C student apps; building the core SaaS on Azure (App Service + Cosmos DB) and *calling* Copilot Studio agents per-institution is the more flexible long-term pattern.
 
 ### Data privacy is non-trivial and non-negotiable
 

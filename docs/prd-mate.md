@@ -116,8 +116,8 @@ Acceptance Criteria:
 ## 7. AI / Agent Feature Specifications
 
 **AI Component:** Mate autonomous academic orchestrator agent
-**Model(s) considered:** Copilot Studio default generative orchestration (GPT-class); Gemini 2.5 Flash-Lite for syllabus parsing; GPT-4o-mini as parsing fallback
-**Selected model:** Copilot Studio generative orchestration for the agent layer; Gemini 2.5 Flash-Lite for document extraction — *reason: competition mandates Copilot Studio as the primary platform; Flash-Lite gives layout-aware syllabus parsing at ~$0.002 per 5-page document, the lowest-cost option that beats Azure Document Intelligence on the 2025 DSL-QA benchmark.*
+**Model(s) considered:** Copilot Studio default generative orchestration (GPT-class); Mistral Document AI for syllabus parsing; Azure AI Vision Read for OCR fallback; OpenAI GPT-4.1 for text generation
+**Selected model:** Copilot Studio generative orchestration for the agent layer; Mistral Document AI for document extraction with Azure AI Vision Read fallback for image-only or low-quality scans; OpenAI GPT-4.1 for text generation — *reason: competition mandates Copilot Studio as the primary platform; Mistral Document AI provides strong layout-aware parsing; Azure AI Vision Read is reliable for hard scans; GPT-4.1 delivers high-quality, controllable text outputs.*
 
 **What the AI does:**
 Parses uploaded syllabi into structured assessments and dates; reasons over the consolidated deadline set to detect collision weeks; interprets lateral natural-language requests; generates realistic study-block proposals against stated availability; asks clarifying questions when input is incomplete.
@@ -134,8 +134,18 @@ Parses uploaded syllabi into structured assessments and dates; reasons over the 
 **Fallback behavior when AI fails or is unavailable:**
 If parsing confidence is low or a date is ambiguous, Mate returns the item flagged "verify with your professor" rather than guessing. If document extraction fails entirely, Mate falls back to manual deadline entry through the same conversational flow. If the orchestration model is unavailable, the dashboard of already-confirmed deadlines remains readable.
 
+**Edge cases and handling:**
+- Scanned or image-only PDFs, rotated pages, or skewed scans route to Azure AI Vision Read; if confidence remains low, the item requires manual confirmation.
+- Multi-column layouts, tables with merged cells, or footnote dates return all candidates with confidence scores rather than choosing one.
+- Date ranges or relative dates ("Week 6", "midterm week", "TBA") are returned with a null date plus a clarifying question.
+- Missing year or timezone defaults to the term header when present; otherwise items are flagged for confirmation.
+- Conflicting dates across sections (calendar vs. assessment table) are surfaced as conflicts and never auto-merged.
+- Multi-term or cross-listed syllabi are split by course/term before extraction.
+- Mixed language (English/Taglish) is parsed but low-confidence items are flagged for review.
+- Embedded images in DOC/PPT uploads prompt the user to upload the original PDF or a clearer scan.
+
 **Token / cost budget per operation:**
-~$0.002–$0.01 per syllabus parsed (Gemini 2.5 Flash-Lite primary). Conversational orchestration on Copilot Studio at ~5–15 Copilot Credits ($0.01/credit) per substantive interaction; demo-scale usage is well within a prepaid pack.
+~$0.002–$0.01 per syllabus parsed (Mistral Document AI primary; Azure AI Vision Read used on OCR fallback). Conversational orchestration on Copilot Studio at ~5–15 Copilot Credits ($0.01/credit) per substantive interaction; demo-scale usage is well within a prepaid pack.
 
 ---
 
@@ -143,12 +153,12 @@ If parsing confidence is low or a date is ambiguous, Mate returns the item flagg
 
 **Dependencies:**
 - Microsoft Copilot Studio environment provisioned with generative orchestration enabled.
-- A document-parsing model endpoint (Gemini 2.5 Flash-Lite or equivalent) reachable from the agent.
+- A document-parsing endpoint for Mistral Document AI and an OCR fallback via Azure AI Vision Read.
 - Sample syllabi representative of real Philippine university course documents for the demo.
 
 **Assumptions:**
 - Competition judging weighs Functionality/UX and Data Accuracy/Relevance 50/50, so extraction accuracy and conflict-reasoning correctness are as important as the conversational experience.
-- Demo syllabi are primarily text-based PDFs (scanned/handwritten handling is a known weaker path, mitigated by confidence flagging).
+- Demo syllabi are primarily text-based PDFs, with a subset of scanned or low-quality documents that rely on OCR fallback and human confirmation.
 - The student retains all responsibility for attending classes and submitting work; Mate is explicitly supportive, not authoritative.
 
 ---
