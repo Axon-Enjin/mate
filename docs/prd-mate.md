@@ -5,10 +5,15 @@ Here is the revised PRD. The dashboard is now constrained to an Adaptive Card, b
 # Product Requirements Document (PRD)
 
 **Project:** Mate — Autonomous Academic Orchestrator
+
 **Date:** 2026-05-19
-**Version:** 0.2
+
+**Version:** 0.3
+
 **Owner:** Carlos Jerico de la Torre
+
 **Status:** Draft
+
 **BRD:** N/A — no BRD written
 
 ---
