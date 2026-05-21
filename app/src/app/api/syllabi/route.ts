@@ -83,18 +83,22 @@ export async function POST(request: NextRequest) {
 
 async function processExtraction(proposalId: string, file: File, userId: string) {
   try {
+    console.log('[Extraction] 🚀 Starting for proposal:', proposalId);
+    console.log('[Extraction] File:', file.name, file.type, file.size, 'bytes');
+    
     // Read file content
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+    console.log('[Extraction] ✅ Buffer created, size:', buffer.length);
     
     // Extract text from PDF
     let documentContent: string;
     if (file.type === 'application/pdf') {
+      console.log('[Extraction] 📄 PDF detected, extracting text...');
       const { extractAndCleanPDF } = await import('@/lib/pdf-extractor');
       documentContent = await extractAndCleanPDF(buffer);
+      console.log('[Extraction] ✅ Text extracted, length:', documentContent.length);
     } else {
-      // For DOC/DOCX, we'll need a different approach
-      // For now, just convert to string (will need proper extraction later)
       documentContent = buffer.toString('utf-8');
     }
 
@@ -102,8 +106,10 @@ async function processExtraction(proposalId: string, file: File, userId: string)
       throw new Error("No text could be extracted from the file. Try a text-based PDF.");
     }
 
+    console.log('[Extraction] 🤖 Calling AI Foundry...');
     // Extract using AI Foundry
     const extractionResult = await extractFromDocument(documentContent);
+    console.log('[Extraction] ✅ AI extraction complete, found', extractionResult.assessments.length, 'assessments');
 
     // Map extraction result to proposal format
     const completedProposal: Proposal = {
@@ -130,7 +136,9 @@ async function processExtraction(proposalId: string, file: File, userId: string)
     };
 
     proposals.set(proposalId, completedProposal);
+    console.log('[Extraction] ✅ Proposal completed');
   } catch (error) {
+    console.error('[Extraction] ❌ Failed:', error);
     logError(`Extraction for proposal ${proposalId}`, error);
     const failedProposal: Proposal = {
       id: proposalId,

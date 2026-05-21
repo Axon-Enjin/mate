@@ -48,28 +48,80 @@ interface CompletionResponse {
 }
 
 async function callAIFoundry(request: CompletionRequest): Promise<CompletionResponse> {
-  const url = `${AI_FOUNDRY_ENDPOINT}/deployments/${request.deployment}/chat/completions?api-version=2024-08-01-preview`;
+  // Azure AI Foundry uses OpenAI-compatible endpoint
+  // Endpoint should be: https://{resource}.services.ai.azure.com/openai/v1
   
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'api-key': AI_FOUNDRY_KEY,
-    },
-    body: JSON.stringify({
-      messages: request.messages,
-      temperature: request.temperature ?? 0.7,
-      max_tokens: request.max_tokens ?? 4000,
-      ...(request.response_format && { response_format: request.response_format }),
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`AI Foundry API error: ${response.status} - ${error}`);
+  // Remove any trailing slashes and /api/projects/... if present
+  let baseEndpoint = AI_FOUNDRY_ENDPOINT.split('/api/')[0].replace(/\/$/, '');
+  
+  // If endpoint doesn't include /openai/v1, add it
+  if (!baseEndpoint.includes('/openai/v1')) {
+    baseEndpoint = `${baseEndpoint}/openai/v1`;
   }
+  
+  // Construct full URL
+  const url = `${baseEndpoint}/chat/completions`;
+  
+  console.log('[AI Foundry] 🤖 Calling:', url);
+  console.log('[AI Foundry] Model:', request.deployment);
+  console.log('[AI Foundry] Messages:', request.messages.length);
+  console.log('[AI Foundry] Temperature:', request.temperature ?? 0.7);
+  console.log('[AI Foundry] Max tokens:', request.max_tokens ?? 4000);
+  
+  // Check if model supports JSON mode (GPT models do, Mistral may not)
+  const supportsJsonMode = request.deployment.toLowerCase().includes('gpt');
+  
+  const requestBody = {
+    model: request.deployment, // Model/deployment name
+    messages: request.messages,
+    temperature: request.temperature ?? 0.7,
+    max_tokens: request.max_tokens ?? 4000,
+    // Only add response_format for models that support it
+    ...(supportsJsonMode && request.response_format && { 
+      response_format: request.response_format 
+    }),
+  };
+  
+  console.log('[AI Foundry] Full request body:', JSON.stringify({
+    ...requestBody,
+    messages: `[${requestBody.messages.length} messages]` // Don't log full messages
+  }, null, 2));
+  
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'api-key': AI_FOUNDRY_KEY,
+      },
+      body: JSON.stringify(requestBody),
+    });
 
-  return response.json();
+    console.log('[AI Foundry] Response status:', response.status);
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('[AI Foundry] ❌ Error response:', error);
+      console.error('[AI Foundry] ❌ This usually means:');
+      console.error('[AI Foundry]    - Model name is wrong');
+      console.error('[AI Foundry]    - Model is not deployed');
+      console.error('[AI Foundry]    - Check Azure AI Foundry portal for correct model name');
+      throw new Error(`AI Foundry API error: ${response.status} - ${error}`);
+    }
+
+    const data = await response.json();
+    console.log('[AI Foundry] ✅ Success, tokens used:', data.usage?.total_tokens || 'unknown');
+    return data;
+  } catch (error) {
+    console.error('[AI Foundry] ❌ Request failed:', error);
+    if (error instanceof Error) {
+      console.error('[AI Foundry] Error message:', error.message);
+      if ('cause' in error) {
+        console.error('[AI Foundry] Error cause:', error.cause);
+      }
+    }
+    throw error;
+  }
 }
 
 // ============================================
@@ -112,6 +164,33 @@ OUTPUT FORMAT:
     }
   ]
 }`;
+
+// ============================================
+// Utility Functions for JSON Parsing
+// ============================================
+
+/**
+ * Strip markdown code blocks from AI response
+ * Handles cases where models return ```json ... ``` wrapped JSON
+ */
+function stripMarkdownCodeBlocks(content: string): string {
+  // Remove ```json and ``` markers
+  let cleaned = content.trim();
+  
+  // Check if content starts with ```json or ```
+  if (cleaned.startsWith('```json')) {
+    cleaned = cleaned.slice(7); // Remove ```json
+  } else if (cleaned.startsWith('```')) {
+    cleaned = cleaned.slice(3); // Remove ```
+  }
+  
+  // Check if content ends with ```
+  if (cleaned.endsWith('```')) {
+    cleaned = cleaned.slice(0, -3); // Remove trailing ```
+  }
+  
+  return cleaned.trim();
+}
 
 // ============================================
 // Extraction Functions
@@ -164,7 +243,11 @@ async function extractWithMistralDocument(
     throw new Error('No response from AI model');
   }
 
-  const parsed = JSON.parse(content) as ExtractionResponse;
+  // Strip markdown code blocks if present (Mistral often wraps JSON in ```json ... ```)
+  const cleanedContent = stripMarkdownCodeBlocks(content);
+  console.log('[AI Foundry] 📝 Parsing JSON response (length:', cleanedContent.length, ')');
+  
+  const parsed = JSON.parse(cleanedContent) as ExtractionResponse;
   
   // Validate and score confidence
   const assessments: ExtractionResult['assessments'] = parsed.assessments.map((assessment) => ({
