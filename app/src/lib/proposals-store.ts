@@ -6,7 +6,6 @@
 import type { Proposal } from '@/types';
 
 declare global {
-	// eslint-disable-next-line no-var
 	var __mateProposals: Map<string, Proposal> | undefined;
 }
 

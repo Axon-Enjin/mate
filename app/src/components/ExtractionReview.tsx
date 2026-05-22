@@ -104,7 +104,7 @@ export default function ExtractionReview({
 
       {/* Assessments List */}
       <div className="space-y-3">
-        {proposal.assessments.map((assessment, index) => (
+        {proposal.assessments.map((assessment) => (
           <div
             key={assessment.id}
             className={`

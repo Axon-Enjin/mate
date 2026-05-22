@@ -94,11 +94,10 @@ export default function ReviewPage() {
         throw new Error("Failed to approve proposal");
       }
 
-      const result = await response.json();
+      await response.json();
       
-      // Show success message
-      alert(result.data?.message || "Deadlines approved successfully!");
-      router.push("/");
+      // Redirect to dashboard to see conflicts and schedule
+      router.push("/dashboard");
     } catch (err) {
       console.error("Approve error:", err);
       alert("Failed to approve deadlines");
