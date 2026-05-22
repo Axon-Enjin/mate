@@ -2,13 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { extractFromDocument } from "@/lib/ai-foundry";
 import { successResponse, errorResponse, logError, getErrorMessage } from "@/lib/utils";
 import { proposals } from "@/lib/proposals-store";
+import { requireUserId } from "@/lib/auth-session";
 import type { Proposal } from "@/types";
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await requireUserId();
+
+    if (!userId) {
+      return NextResponse.json(
+        errorResponse("Unauthorized - Please sign in"),
+        { status: 401 }
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get("file") as File;
-    const userId = formData.get("userId") as string || "demo-user"; // TODO: Get from auth
 
     if (!file) {
       return NextResponse.json(

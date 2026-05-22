@@ -19,9 +19,13 @@ function getClient(): CosmosClient {
     const key = process.env.COSMOS_KEY;
 
     if (!endpoint || !key) {
+      console.error('[Cosmos] Missing environment variables!');
+      console.error('[Cosmos] COSMOS_ENDPOINT:', endpoint ? 'SET' : 'MISSING');
+      console.error('[Cosmos] COSMOS_KEY:', key ? 'SET (length: ' + key.length + ')' : 'MISSING');
       throw new Error('COSMOS_ENDPOINT and COSMOS_KEY must be set in environment variables');
     }
 
+    console.log('[Cosmos] Initializing client with endpoint:', endpoint);
     client = new CosmosClient({ endpoint, key });
   }
   return client;
@@ -30,12 +34,14 @@ function getClient(): CosmosClient {
 function getDatabase(): Database {
   if (!database) {
     const dbName = process.env.COSMOS_DATABASE || 'mate-dev-db';
+    console.log('[Cosmos] Getting database:', dbName);
     database = getClient().database(dbName);
   }
   return database;
 }
 
 function getContainer(containerName: string): Container {
+  console.log('[Cosmos] Getting container:', containerName);
   return getDatabase().container(containerName);
 }
 
@@ -199,14 +205,28 @@ export async function updateAssessment(
 
 export async function getUserAssessments(userId: string): Promise<Assessment[]> {
   const container = getContainer(CONTAINERS.ASSESSMENTS);
-  const { resources } = await container.items
-    .query<Assessment>({
-      query: 'SELECT * FROM c WHERE c.user_id = @userId ORDER BY c.due_at',
-      parameters: [{ name: '@userId', value: userId }],
-    })
-    .fetchAll();
   
-  return resources;
+  try {
+    console.log('[Cosmos] Querying assessments for user:', userId);
+    
+    const { resources } = await container.items
+      .query<Assessment>({
+        query: 'SELECT * FROM c WHERE c.user_id = @userId ORDER BY c.due_at',
+        parameters: [{ name: '@userId', value: userId }],
+      })
+      .fetchAll();
+    
+    console.log('[Cosmos] Found', resources.length, 'assessments');
+    
+    return resources;
+  } catch (error) {
+    console.error('[Cosmos] Error querying assessments:', error);
+    if (error instanceof Error) {
+      console.error('[Cosmos] Error message:', error.message);
+      console.error('[Cosmos] Error stack:', error.stack);
+    }
+    throw error;
+  }
 }
 
 export async function getCourseAssessments(courseId: string, userId: string): Promise<Assessment[]> {
