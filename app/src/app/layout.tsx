@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
 import SessionProvider from "@/components/SessionProvider";
 import "./globals.css";
 
@@ -15,6 +15,12 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-display",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "Mate — Autonomous Academic Orchestrator",
   description: "Upload your syllabi and Mate reads them, flags deadline conflicts, and builds your study schedule — zero setup.",
@@ -27,7 +33,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full">
-      <body className={`${inter.variable} ${jetbrainsMono.variable} min-h-full flex flex-col`}>
+      <body
+        className={`${inter.variable} ${jetbrainsMono.variable} ${fraunces.variable} min-h-full flex flex-col`}
+      >
         <SessionProvider>{children}</SessionProvider>
       </body>
     </html>

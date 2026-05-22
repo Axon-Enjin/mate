@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import NavBar from "@/components/NavBar";
 import ConflictReport from "@/components/ConflictReport";
 import SchedulePlanner from "@/components/SchedulePlanner";
 import type { Assessment, AvailabilityInput } from "@/types";
@@ -99,6 +100,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col flex-1 bg-bg">
+      <NavBar />
       {/* Header */}
       <div className="border-b border-border bg-surface">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">
