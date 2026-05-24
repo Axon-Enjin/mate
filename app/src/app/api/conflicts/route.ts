@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
         successResponse({
           conflicts: [],
           assessments: [],
+          all_assessments: [],
           message: "No assessments found. Upload a syllabus first!",
         })
       );
@@ -44,6 +45,7 @@ export async function GET(request: NextRequest) {
         successResponse({
           conflicts: [],
           assessments: majorAssessments,
+          all_assessments: assessments.filter((a) => a.review_state === "approved"),
           message: majorAssessments.length === 0 
             ? "No major assessments found yet."
             : "Not enough major assessments to detect conflicts (need at least 2).",
@@ -62,6 +64,7 @@ export async function GET(request: NextRequest) {
       successResponse({
         conflicts: result.conflicts,
         assessments: majorAssessments,
+        all_assessments: assessments.filter((a) => a.review_state === "approved"),
         message:
           result.conflicts.length > 0
             ? `Found ${result.conflicts.length} conflict${result.conflicts.length !== 1 ? "s" : ""}`

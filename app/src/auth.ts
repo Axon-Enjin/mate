@@ -89,10 +89,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       return await refreshAccessToken(token);
     },
     async session({ session, token }) {
-      const authSubject = (token.sub as string | undefined) || session.user?.email;
-
-      if (authSubject) {
-        session.user.id = authSubject;
+      // Always use Microsoft Entra object id — stable across logins (never email).
+      if (token.sub) {
+        session.user.id = token.sub;
       }
 
       session.accessToken = token.accessToken as string;

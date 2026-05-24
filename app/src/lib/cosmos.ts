@@ -105,6 +105,21 @@ export async function getUserByAuthSubject(authSubject: string): Promise<User | 
   return resources[0] || null;
 }
 
+export async function updateUser(
+  userId: string,
+  updates: Partial<User>
+): Promise<User> {
+  const existing = await getUser(userId);
+  if (!existing) {
+    throw new Error(`User ${userId} not found`);
+  }
+
+  const container = getContainer(CONTAINERS.USERS);
+  const updated = { ...existing, ...updates };
+  const { resource } = await container.item(userId, userId).replace(updated);
+  return resource as User;
+}
+
 // ============================================
 // Course Operations
 // ============================================
@@ -242,6 +257,32 @@ export async function getCourseAssessments(courseId: string, userId: string): Pr
     .fetchAll();
   
   return resources;
+}
+
+export async function deleteAssessment(assessmentId: string, userId: string): Promise<void> {
+  const container = getContainer(CONTAINERS.ASSESSMENTS);
+  await container.item(assessmentId, userId).delete();
+}
+
+export async function deleteCourseWithAssessments(
+  courseId: string,
+  userId: string
+): Promise<{ deleted_assessments: number }> {
+  const course = await getCourse(courseId, userId);
+  if (!course) {
+    throw new Error(`Course ${courseId} not found`);
+  }
+
+  const assessments = await getCourseAssessments(courseId, userId);
+
+  for (const assessment of assessments) {
+    await deleteAssessment(assessment.id, userId);
+  }
+
+  const container = getContainer(CONTAINERS.COURSES);
+  await container.item(courseId, userId).delete();
+
+  return { deleted_assessments: assessments.length };
 }
 
 export async function approveAssessments(assessmentIds: string[], userId: string): Promise<Assessment[]> {

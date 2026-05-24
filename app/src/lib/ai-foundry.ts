@@ -3,7 +3,15 @@
  * Wrapper for GPT-5, Mistral-Large-3, and mistral-document-ai-2512
  */
 
-import type { AIMessage, ExtractionResult, Assessment, AvailabilityInput } from '@/types';
+import type {
+  AIMessage,
+  ExtractionResult,
+  Assessment,
+  AvailabilityInput,
+  ChatAnalysis,
+  ChatIntent,
+  ChatTurn,
+} from '@/types';
 
 // ============================================
 // Configuration
@@ -459,34 +467,108 @@ Remember: Respond with ONLY valid JSON, no other text.`;
 // Lateral Language Processing
 // ============================================
 
-export async function processNaturalLanguage(
-  userMessage: string,
-  context: Record<string, unknown>
-): Promise<string> {
-  const systemPrompt = `You are Mate, an autonomous academic assistant for Filipino university students.
+const CHAT_SYSTEM_PROMPT = `You are Mate, an autonomous academic assistant for Filipino university students.
 
 You help students plan their semester by:
 - Understanding vague requests like "help me plan my week"
-- Asking clarifying questions when needed
+- Asking exactly ONE clarifying question when availability or priorities are missing
 - Being warm, supportive, and non-judgmental
-- Using Taglish when appropriate
+- Using Taglish when appropriate ("Sige, let's sort this out")
 
-If the user's request is ambiguous or missing information, ask ONE clarifying question.
-If you have enough information, provide a helpful response.
+CRITICAL: Respond with ONLY valid JSON — no markdown, no extra text.
 
-Keep responses concise and actionable.`;
+JSON schema:
+{
+  "intent": "clarify" | "schedule" | "conflicts" | "general",
+  "reply": "user-facing message in plain language",
+  "availability": null OR {
+    "unavailable_times": [{ "day": "Monday", "start": "08:00", "end": "17:00" }],
+    "preferred_study_duration": 120
+  },
+  "ready_to_schedule": false
+}
+
+Rules:
+- intent "clarify": missing info for scheduling — ask ONE question in reply; ready_to_schedule=false; availability=null
+- intent "schedule": user gave enough availability — set ready_to_schedule=true and populate availability
+- intent "conflicts": user asks about collision weeks or overlapping deadlines
+- intent "general": other academic planning questions
+- Never invent deadlines not in context
+- If no assessments in context, tell user to upload a syllabus first
+- Default preferred_study_duration to 120 minutes when inferring availability`;
+
+function defaultChatAnalysis(reply: string, intent: ChatIntent = 'general'): ChatAnalysis {
+  return {
+    intent,
+    reply,
+    availability: null,
+    ready_to_schedule: false,
+  };
+}
+
+function parseChatAnalysis(content: string): ChatAnalysis {
+  try {
+    const cleaned = stripMarkdownCodeBlocks(content);
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : cleaned) as Partial<ChatAnalysis>;
+
+    if (!parsed.reply || typeof parsed.reply !== 'string') {
+      return defaultChatAnalysis(content.trim() || 'Can you tell me a bit more?');
+    }
+
+    const intent = (['clarify', 'schedule', 'conflicts', 'general'].includes(parsed.intent || '')
+      ? parsed.intent
+      : 'general') as ChatIntent;
+
+    return {
+      intent,
+      reply: parsed.reply,
+      availability: parsed.availability ?? null,
+      ready_to_schedule: Boolean(parsed.ready_to_schedule),
+    };
+  } catch {
+    return defaultChatAnalysis(
+      content.trim() || "I'm not sure how to help with that. Can you clarify?",
+      'general'
+    );
+  }
+}
+
+export async function processNaturalLanguage(
+  userMessage: string,
+  context: Record<string, unknown>,
+  history: ChatTurn[] = []
+): Promise<ChatAnalysis> {
+  const historyMessages: AIMessage[] = history.map((turn) => ({
+    role: turn.role,
+    content: turn.content,
+  }));
 
   const response = await callAIFoundry({
     deployment: DEPLOYMENTS.MISTRAL_LARGE,
     messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: `Context: ${JSON.stringify(context)}\n\nUser: ${userMessage}` },
+      { role: 'system', content: CHAT_SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: `Student context: ${JSON.stringify(context)}\n\nConversation so far is in the message history. Respond to the latest user message.`,
+      },
+      ...historyMessages,
+      { role: 'user', content: userMessage },
     ],
-    temperature: 0.7,
-    max_tokens: 500,
+    temperature: 0.5,
+    max_tokens: 700,
+    response_format: { type: 'json_object' },
   });
 
-  return response.choices[0]?.message?.content || 'I\'m not sure how to help with that. Can you clarify?';
+  const content = response.choices[0]?.message?.content;
+  if (!content) {
+    return defaultChatAnalysis(
+      "I'm having trouble right now. Can you try again in a moment?",
+      'general'
+    );
+  }
+
+  return parseChatAnalysis(content);
 }
 
 // ============================================

@@ -12,9 +12,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Repository Is
 
-This is a **documentation and strategy workspace** for **Mate — Autonomous Academic Orchestrator**, an entry for the **KPMG Academic Innovation Challenge** (submission due **2026-05-25**). There is no application source code here — this repo holds the market research, the competition brief, and the formal product-document suite that specifies the product.
+This repo holds **product strategy, formal specifications, and the demo application** for **Mate — Autonomous Academic Orchestrator**, an entry for the **KPMG Academic Innovation Challenge** (submission due **2026-05-25**).
 
-There are **no build, test, lint, or deploy commands.** Do not add code-development commands to this file. The work here is reading, synthesizing, and writing Markdown documents.
+| Path | Purpose |
+|------|---------|
+| `docs/` | Formal product-document suite (BRD, PRD, SDD, …) |
+| `app/` | Next.js demo SaaS (upload, extraction, chat, conflicts, scheduling) |
+| `Mate.md`, `KPMG.md` | Market research and competition brief |
+
+For application development, see **`app/README.md`**. For document work, follow the FMD routing in `docs/`.
 
 ---
 

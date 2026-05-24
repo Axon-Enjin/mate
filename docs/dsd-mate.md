@@ -123,6 +123,23 @@ Confidence and conflict states are encoded **by color *and* by an icon + label**
 - Conflict callout: `--color-surface-emphasis` block, `--color-warning` header, one concrete intervention line ("Start the IT 101 project 4 days early — it collides with the CS 21 exam.").
 - Modal backdrop: `rgba(0,0,0,0.4)` + `blur(4px)`.
 
+### Chat panel (`MateChat`)
+
+The conversation surface is Mate's primary lateral-language entry point (dashboard **Ask Mate** tab).
+
+| Element | Spec |
+|---------|------|
+| Column width | `max-width: 720px` centered (§3 grid) |
+| Mate bubble | `--color-surface-emphasis` bg, `1px --color-border`, `--color-text` |
+| User bubble | `--color-primary` bg, white text |
+| Typing indicator | Three pulsing dots + "Mate" label; appears immediately on send (latency mask) |
+| Quick prompts | Secondary buttons (`1px --color-primary` border); e.g. "Help me plan my week" |
+| Input | `textarea`, `8px` radius, focus ring `2px --color-primary`; min touch target `48px` send button |
+| Inline schedule blocks | `--color-surface` cards inside the thread when `/api/chat` returns study blocks |
+| Inline conflict callouts | `--color-surface-emphasis` + ⚠ + intervention line (same as conflict report) |
+
+Copy tone: warm, non-judgmental, Taglish-aware. Mate asks **one** clarifying question before generating a schedule when availability is missing.
+
 ---
 
 ## 5. Motion & Micro-interactions
@@ -173,7 +190,8 @@ VISUAL_DENSITY:     6   (one dense consolidated view, deliberately not sparse)
 
 | Pattern | Status | Location | Fix Applied |
 |---------|--------|----------|-------------|
-| _(none yet — run `npx impeccable detect src/` after the first Mate web/PWA implementation and log findings here)_ | — | — | — |
+| Chat panel wider than 720px on mobile | Fixed | `MateChat.tsx` | `max-w-[720px]` enforced |
+| Decorative chat animations | Avoided | `MateChat.tsx` | Typing indicator only (latency mask) |
 
 ---
 
@@ -202,7 +220,7 @@ Rules carried into the embed: exactly one primary action per card; state by text
 - [x] Section 4 defines component states including Disabled and Focus and the "needs review" pre-focus
 - [x] Section 7 taste-skill dials set and a variant chosen with reasoning
 - [x] WCAG AA contrast verified for primary text/background and the warning pairing
-- [ ] This document exists in code as CSS variables / Tailwind config — to build at M0 (no frontend codebase yet); revisit after first implementation
+- [x] This document exists in code as CSS variables / Tailwind config — implemented in `app/src/app/globals.css` and `app/tailwind.config.ts`; chat panel in `app/src/components/MateChat.tsx`
 - [x] Section 9 documents the Teams/Outlook embed as a secondary rendering target, not a separate design
 
 ---

@@ -82,7 +82,7 @@ export interface ExtractionProposal {
   assessments?: Assessment[];
   tier_used?: 'mistral' | 'azure_vision' | 'manual';
   aggregate_confidence?: number;
-  status: 'processing' | 'completed' | 'approved' | 'failed';
+  status: 'processing' | 'completed' | 'approving' | 'approved' | 'failed';
   created_at: string;
   updated_at?: string;
   approved_at?: string;
@@ -194,6 +194,47 @@ export interface ScheduleRequest {
 export interface ScheduleResponse {
   study_blocks: StudyBlock[];
   message: string;
+}
+
+// ============================================
+// Chat / Lateral Language Types
+// ============================================
+
+export interface ChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export type ChatIntent = 'clarify' | 'schedule' | 'conflicts' | 'general';
+
+export interface ChatAnalysis {
+  intent: ChatIntent;
+  reply: string;
+  availability: AvailabilityInput | null;
+  ready_to_schedule: boolean;
+}
+
+export interface ChatStudyBlock {
+  assessment_id: string;
+  start_at: string;
+  end_at: string;
+  description: string;
+}
+
+export interface ChatConflictWindow {
+  start_date: string;
+  end_date: string;
+  assessment_ids: string[];
+  severity: 'high' | 'medium' | 'low';
+  intervention: string;
+}
+
+export interface ChatResponseData {
+  message: string;
+  intent: ChatIntent;
+  study_blocks?: ChatStudyBlock[];
+  schedule_message?: string;
+  conflicts?: ChatConflictWindow[];
 }
 
 // ============================================

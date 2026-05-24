@@ -25,7 +25,7 @@ export default function Home() {
 
       <NavBar />
 
-      <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 pb-16 pt-20 sm:px-8 lg:px-12">
+      <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 pb-16 pt-8 sm:px-8 lg:px-12">
         <div className="w-full max-w-5xl">
           <div className="grid gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
             <div className="space-y-6 animate-[fade-up_700ms_ease-out]">
