@@ -28,6 +28,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // TypeScript guard: accessToken is guaranteed to be string here
+    const accessToken: string = session.accessToken;
+
     const body = await request.json().catch(() => ({}));
     const { study_block_ids } = body;
 
@@ -67,7 +70,7 @@ export async function POST(request: NextRequest) {
           ? `Study session for ${assessment.title}${assessment.due_at ? ` (Due: ${new Date(assessment.due_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })})` : ""}`
           : "Study session scheduled by Mate";
 
-        const event = await createCalendarEvent(session.accessToken, {
+        const event = await createCalendarEvent(accessToken, {
           subject: title,
           start: block.start_at,
           end: block.end_at,
