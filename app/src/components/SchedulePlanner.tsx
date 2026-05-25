@@ -8,12 +8,18 @@ interface StudyBlock {
   start_at: string;
   end_at: string;
   description: string;
+  id?: string;
 }
 
 interface SchedulePlannerProps {
-  onGenerateSchedule: (availability: AvailabilityInput) => Promise<{
+  onGenerateSchedule: (body: {
+    availability?: AvailabilityInput;
+    use_outlook?: boolean;
+    save_proposal?: boolean;
+  }) => Promise<{
     study_blocks: StudyBlock[];
     message: string;
+    availability_source?: string;
   }>;
 }
 
@@ -25,9 +31,11 @@ export default function SchedulePlanner({
   const [schedule, setSchedule] = useState<{
     study_blocks: StudyBlock[];
     message: string;
+    availability_source?: string;
   } | null>(null);
 
-  // Simple availability form state
+  // Availability input state
+  const [useOutlook, setUseOutlook] = useState(false);
   const [unavailableTimes, setUnavailableTimes] = useState<
     { day: string; start: string; end: string }[]
   >([
@@ -44,12 +52,19 @@ export default function SchedulePlanner({
     setIsGenerating(true);
     setError(null);
     try {
-      const availability: AvailabilityInput = {
-        unavailable_times: unavailableTimes,
-        preferred_study_duration: studyDuration,
+      const body: any = {
+        use_outlook: useOutlook,
+        save_proposal: false,
       };
 
-      const result = await onGenerateSchedule(availability);
+      if (!useOutlook || unavailableTimes.length > 0) {
+        body.availability = {
+          unavailable_times: unavailableTimes,
+          preferred_study_duration: studyDuration,
+        };
+      }
+
+      const result = await onGenerateSchedule(body);
       setSchedule(result);
     } catch (error) {
       console.error("Schedule generation error:", error);
@@ -62,16 +77,54 @@ export default function SchedulePlanner({
 
   return (
     <div className="space-y-6">
+      {/* Availability Source Toggle */}
+      <div className="bg-surface border border-border rounded-lg shadow-sm p-6">
+        <h3 className="text-lg font-semibold text-text mb-4">
+          Where should I get your availability?
+        </h3>
+        <div className="space-y-3">
+          <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-surface-emphasis cursor-pointer transition">
+            <input
+              type="radio"
+              name="availability_source"
+              checked={!useOutlook}
+              onChange={() => setUseOutlook(false)}
+              className="w-4 h-4"
+            />
+            <span className="text-sm font-medium text-text">
+              Manual input (I'll enter my schedule)
+            </span>
+          </label>
+          <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-surface-emphasis cursor-pointer transition">
+            <input
+              type="radio"
+              name="availability_source"
+              checked={useOutlook}
+              onChange={() => setUseOutlook(true)}
+              className="w-4 h-4"
+            />
+            <div className="flex-1">
+              <span className="text-sm font-medium text-text">
+                Auto from Outlook (Get my busy times from calendar)
+              </span>
+              <p className="text-xs text-text-muted mt-1">
+                Reads your calendar for the next 7 days
+              </p>
+            </div>
+          </label>
+        </div>
+      </div>
+
       {/* Availability Form */}
       <div className="bg-surface border border-border rounded-lg shadow-sm p-6">
         <h3 className="text-lg font-semibold text-text mb-4">
-          Tell me about your availability
+          {useOutlook ? "Add manual adjustments" : "Tell me about your availability"}
         </h3>
 
         {/* Unavailable Times */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-text mb-3">
-            When are you busy? (Classes, work, commute)
+            {useOutlook ? "(Optional) Additional busy times" : "When are you busy? (Classes, work, commute)"}
           </label>
           <div className="space-y-3">
             {unavailableTimes.map((time, index) => (

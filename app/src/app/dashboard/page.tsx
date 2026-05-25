@@ -67,85 +67,35 @@ export default function DashboardPage() {
     }
   };
 
-  const handleGenerateSchedule = async (availability: AvailabilityInput) => {
-    const response = await fetch("/api/schedule", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ availability }),
-    });
+  const handleGenerateSchedule = async (body: {
+    availability?: AvailabilityInput;
+    use_outlook?: boolean;
+    save_proposal?: boolean;
+  }) => {
+    try {
+      const response = await fetch("/api/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
       throw new Error(errorData.error || "Failed to generate schedule");
     }
 
-    const data = await response.json();
-    return {
-      study_blocks: data.data?.study_blocks || [],
-      message: data.data?.message || "Schedule generated!",
-    };
+      const data = await response.json();
+      console.log("Schedule generated:", data);
+      
+      return {
+        study_blocks: data.data?.study_blocks || [],
+        message: data.data?.message || "Schedule generated!",
+      };
+    } catch (error) {
+      console.error("Generate schedule error:", error);
+      throw error;
+    }
   };
-
-  const tabs: { id: DashboardTab; label: string; icon: React.ReactNode; badge?: number }[] = [
-    {
-      id: "deadlines",
-      label: "Deadlines",
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-          />
-        </svg>
-      ),
-      badge: allAssessments.length > 0 ? allAssessments.length : undefined,
-    },
-    {
-      id: "chat",
-      label: "Ask Mate",
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-          />
-        </svg>
-      ),
-    },
-    {
-      id: "conflicts",
-      label: "Conflicts",
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-          />
-        </svg>
-      ),
-      badge: conflicts.length,
-    },
-    {
-      id: "schedule",
-      label: "Study Schedule",
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-          />
-        </svg>
-      ),
-    },
-  ];
 
   if (loading) {
     return (
