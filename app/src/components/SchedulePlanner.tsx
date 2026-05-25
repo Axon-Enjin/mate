@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 import type { AvailabilityInput } from "@/types";
 
 interface StudyBlock {
@@ -20,7 +21,9 @@ interface SchedulePlannerProps {
 export default function SchedulePlanner({
   onGenerateSchedule,
 }: SchedulePlannerProps) {
+  const { data: session, status } = useSession();
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [schedule, setSchedule] = useState<{
     study_blocks: StudyBlock[];
@@ -37,6 +40,79 @@ export default function SchedulePlanner({
     { day: "Thursday", start: "08:00", end: "17:00" },
     { day: "Friday", start: "08:00", end: "17:00" },
   ]);
+
+  const syncOutlookCalendar = async () => {
+    setIsSyncing(true);
+    setError(null);
+    try {
+      const startDate = new Date();
+      const endDate = new Date(startDate.getTime() + 14 * 24 * 60 * 60 * 1000); // 14 days range
+
+      const response = await fetch("/api/calendar/availability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch calendar availability. Please ensure calendar permissions are configured.");
+      }
+
+      const data = await response.json();
+      const scheduleItems = data.schedule?.value?.[0]?.scheduleItems || [];
+
+      const newUnavailable = scheduleItems
+        .filter((item: any) => item.status === "busy" || item.status === "oof")
+        .map((item: any) => {
+          const startLocal = new Date(item.start.dateTime);
+          const endLocal = new Date(item.end.dateTime);
+
+          const year = startLocal.getFullYear();
+          const month = String(startLocal.getMonth() + 1).padStart(2, "0");
+          const day = String(startLocal.getDate()).padStart(2, "0");
+
+          const startHours = String(startLocal.getHours()).padStart(2, "0");
+          const startMins = String(startLocal.getMinutes()).padStart(2, "0");
+          const endHours = String(endLocal.getHours()).padStart(2, "0");
+          const endMins = String(endLocal.getMinutes()).padStart(2, "0");
+
+          return {
+            day: `${year}-${month}-${day}`,
+            start: `${startHours}:${startMins}`,
+            end: `${endHours}:${endMins}`,
+          };
+        });
+
+      if (newUnavailable.length === 0) {
+        alert("No busy events found in your Outlook Calendar for the next 14 days!");
+        return;
+      }
+
+      setUnavailableTimes((prev) => {
+        const staticWeekly = prev.filter((t) => !t.day.includes("-"));
+        const merged = [...staticWeekly];
+        for (const item of newUnavailable) {
+          const exists = merged.some(
+            (t) => t.day === item.day && t.start === item.start && t.end === item.end
+          );
+          if (!exists) {
+            merged.push(item);
+          }
+        }
+        return merged;
+      });
+      
+      alert(`Successfully synced ${newUnavailable.length} busy block(s) from Outlook!`);
+    } catch (err) {
+      console.error("Sync calendar error:", err);
+      setError(err instanceof Error ? err.message : "Failed to sync Outlook Calendar");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const [studyDuration, setStudyDuration] = useState(120); // minutes
 
@@ -64,9 +140,39 @@ export default function SchedulePlanner({
     <div className="space-y-6">
       {/* Availability Form */}
       <div className="bg-surface border border-border rounded-lg shadow-sm p-6">
-        <h3 className="text-lg font-semibold text-text mb-4">
-          Tell me about your availability
-        </h3>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+          <h3 className="text-lg font-semibold text-text">
+            Tell me about your availability
+          </h3>
+          {status === "authenticated" && (
+            <button
+              onClick={syncOutlookCalendar}
+              disabled={isSyncing}
+              className="
+                inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold
+                border border-primary rounded-lg text-primary hover:bg-surface-emphasis
+                transition-all duration-150 disabled:opacity-50 min-h-[36px]
+              "
+            >
+              {isSyncing ? (
+                <>
+                  <svg className="animate-spin h-3.5 w-3.5 text-primary" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span>Syncing Calendar...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H18" />
+                  </svg>
+                  <span>Sync Outlook Calendar</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
 
         {/* Unavailable Times */}
         <div className="mb-6">
@@ -79,8 +185,10 @@ export default function SchedulePlanner({
                 key={index}
                 className="flex items-center gap-3 p-3 bg-surface-emphasis rounded-lg"
               >
-                <span className="text-sm font-medium text-text w-24">
-                  {time.day}
+                <span className="text-sm font-medium text-text w-28 shrink-0">
+                  {time.day.includes("-")
+                    ? new Date(time.day).toLocaleDateString("en-PH", { month: "short", day: "numeric" })
+                    : time.day}
                 </span>
                 <input
                   type="time"

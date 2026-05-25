@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { proposals, approvingLocks } from "@/lib/proposals-store";
-import { createCourse, createAssessments } from "@/lib/cosmos";
+import { approvingLocks } from "@/lib/proposals-store";
+import { createCourse, createAssessments, getProposal, updateProposal } from "@/lib/cosmos";
 import { detectConflicts } from "@/lib/ai-foundry";
+import { requireUserId } from "@/lib/auth-session";
 import { successResponse, errorResponse, logError } from "@/lib/utils";
 import type { Assessment } from "@/types";
 
@@ -11,8 +12,18 @@ export async function POST(
 ) {
   const { id } = await params;
 
+  let userId: string | null = null;
+
   try {
-    const proposal = proposals.get(id);
+    userId = await requireUserId();
+    if (!userId) {
+      return NextResponse.json(
+        errorResponse("Unauthorized - Please sign in"),
+        { status: 401 }
+      );
+    }
+
+    const proposal = await getProposal(id, userId);
 
     if (!proposal) {
       return NextResponse.json(
@@ -61,7 +72,7 @@ export async function POST(
 
     // Lock immediately so a second click cannot slip through
     approvingLocks.add(id);
-    proposals.set(id, { ...proposal, status: "approving" });
+    await updateProposal(id, userId, { status: "approving" });
 
     const course = await createCourse({
       user_id: proposal.user_id,
@@ -90,14 +101,11 @@ export async function POST(
       logError("Conflict detection", error);
     });
 
-    const approvedProposal = {
-      ...proposal,
+    const approvedProposal = await updateProposal(id, userId, {
       status: "approved" as const,
       course_id: course.id,
       approved_at: new Date().toISOString(),
-    };
-
-    proposals.set(id, approvedProposal);
+    });
 
     return NextResponse.json(
       successResponse({
@@ -111,9 +119,15 @@ export async function POST(
   } catch (error) {
     logError("Approve proposal", error);
 
-    const failed = proposals.get(id);
-    if (failed?.status === "approving") {
-      proposals.set(id, { ...failed, status: "completed" });
+    if (userId) {
+      try {
+        const failed = await getProposal(id, userId);
+        if (failed?.status === "approving") {
+          await updateProposal(id, userId, { status: "completed" });
+        }
+      } catch (dbErr) {
+        logError("Failed to reset proposal status in catch", dbErr);
+      }
     }
 
     return NextResponse.json(

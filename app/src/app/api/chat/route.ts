@@ -150,6 +150,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(successResponse(responseData));
   } catch (error) {
     logError("Chat processing", error);
+    if (error instanceof Error) {
+      const message = error.message || "";
+      if (
+        message.includes("fetch failed") ||
+        message.includes("Connect Timeout") ||
+        message.includes("UND_ERR_CONNECT_TIMEOUT")
+      ) {
+        return NextResponse.json(
+          successResponse({
+            message:
+              "I'm having trouble reaching the AI service right now. Please try again in a minute.",
+            intent: "general",
+          }),
+          { status: 200 }
+        );
+      }
+    }
     return NextResponse.json(
       errorResponse("Failed to process message"),
       { status: 500 }

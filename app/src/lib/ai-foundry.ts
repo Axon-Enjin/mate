@@ -101,7 +101,7 @@ async function callAIFoundry(request: CompletionRequest): Promise<CompletionResp
   
   console.log('[AI Foundry] Full request body:', JSON.stringify({
     ...requestBody,
-    messages: `[${requestBody.messages.length} messages]` // Don't log full messages
+    messages: `[${request.messages.length} messages]` // Don't log full messages
   }, null, 2));
   
   try {
@@ -266,23 +266,86 @@ async function extractWithMistralDocument(
   
   const parsed = JSON.parse(cleanedContent) as ExtractionResponse;
   
-  // Validate and score confidence
-  const assessments: ExtractionResult['assessments'] = parsed.assessments.map((assessment) => ({
-    ...assessment,
-    review_state:
-      assessment.confidence < CONFIDENCE_THRESHOLD || assessment.due_at === null
-        ? 'needs_review'
-        : 'approved',
-  }));
+  const validatedResult = validateExtractionResult(parsed, documentContent, termHint);
+  
+  return {
+    ...validatedResult,
+    tier_used: 'mistral',
+  };
+}
 
-  const aggregate_confidence = assessments.length > 0
-    ? assessments.reduce((sum, assessment) => sum + assessment.confidence, 0) / assessments.length
+function validateExtractionResult(
+  parsed: ExtractionResponse,
+  documentContent: string,
+  termHint?: string
+): Omit<ExtractionResult, 'tier_used'> {
+  const validatedAssessments: ExtractionResult['assessments'] = [];
+
+  // Determine term window based on termHint or course.term_label
+  let termStart: Date | null = null;
+  let termEnd: Date | null = null;
+  
+  const termString = termHint || parsed.course.term_label || "";
+  const yearMatches = termString.match(/\b(20\d{2})\b/g);
+  if (yearMatches && yearMatches.length > 0) {
+    const years = yearMatches.map(Number);
+    const startYear = Math.min(...years);
+    const endYear = yearMatches.length > 1 ? Math.max(...years) : startYear + 1;
+    // Academic year runs from June 1 of startYear to July 31 of endYear
+    termStart = new Date(Date.UTC(startYear, 5, 1)); // June 1st
+    termEnd = new Date(Date.UTC(endYear, 6, 31, 23, 59, 59)); // July 31st
+  } else {
+    // Fallback: +/- 1 year from current date
+    const currentYear = new Date().getFullYear();
+    termStart = new Date(Date.UTC(currentYear - 1, 0, 1));
+    termEnd = new Date(Date.UTC(currentYear + 1, 11, 31, 23, 59, 59));
+  }
+
+  for (const assessment of parsed.assessments) {
+    // 1. Evidence Guard (verbatim check)
+    if (!assessment.evidence || !documentContent.toLowerCase().includes(assessment.evidence.toLowerCase())) {
+      console.warn(
+        `[Evidence Guard] Dropped assessment "${assessment.title}" because evidence snippet was missing or not found verbatim in syllabus.`
+      );
+      continue; // Drop completely
+    }
+
+    let dueAt = assessment.due_at;
+    let reviewState = 'approved';
+
+    // 2. Term Window Check
+    if (dueAt) {
+      const dueDate = new Date(dueAt);
+      if (isNaN(dueDate.getTime()) || dueDate < termStart || dueDate > termEnd) {
+        console.warn(
+          `[Term Window Check] Coercing due_at to null for "${assessment.title}" because "${dueAt}" is outside term window [${termStart.toISOString()}, ${termEnd.toISOString()}].`
+        );
+        dueAt = null;
+        reviewState = 'needs_review';
+      }
+    } else {
+      reviewState = 'needs_review';
+    }
+
+    // Confidence threshold check
+    if (assessment.confidence < CONFIDENCE_THRESHOLD) {
+      reviewState = 'needs_review';
+    }
+
+    validatedAssessments.push({
+      ...assessment,
+      due_at: dueAt,
+      review_state: reviewState as 'needs_review' | 'approved',
+    });
+  }
+
+  const aggregate_confidence = validatedAssessments.length > 0
+    ? validatedAssessments.reduce((sum, a) => sum + a.confidence, 0) / validatedAssessments.length
     : 0;
 
   return {
     course: parsed.course,
-    assessments,
-    tier_used: 'mistral',
+    assessments: validatedAssessments,
     aggregate_confidence,
   };
 }
@@ -329,43 +392,44 @@ Return JSON format:
 
   const userPrompt = `Analyze these assessments for conflicts:\n\n${JSON.stringify(assessments, null, 2)}\n\nRemember: Respond with ONLY valid JSON, no other text.`;
 
-  const response = await callAIFoundry({
-    deployment: DEPLOYMENTS.MISTRAL_LARGE,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ],
-    temperature: 0.3,
-    max_tokens: 4000,
-  });
-
-  const content = response.choices[0]?.message?.content;
-  
-  if (!content) {
-    throw new Error('No response from AI');
-  }
-  
-  console.log('[AI Foundry] Raw conflict response:', content.substring(0, 200));
-  
-  // Strip markdown code blocks if present
-  let cleanedContent = stripMarkdownCodeBlocks(content);
-  
-  // Try to extract JSON from the response if it's wrapped in text
-  const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    cleanedContent = jsonMatch[0];
-  }
-  
-  console.log('[AI Foundry] Cleaned conflict response:', cleanedContent.substring(0, 200));
-  
   try {
-    return JSON.parse(cleanedContent) as ConflictDetectionResult;
-  } catch (error) {
-    console.error('[AI Foundry] Failed to parse conflict JSON:', error);
-    console.error('[AI Foundry] Content was:', cleanedContent);
+    const response = await callAIFoundry({
+      deployment: DEPLOYMENTS.MISTRAL_LARGE,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.3,
+      max_tokens: 4000,
+    });
+
+    const content = response.choices[0]?.message?.content;
     
-    // Return empty conflicts instead of crashing
-    return { conflicts: [] };
+    if (!content) {
+      throw new Error('No response from AI');
+    }
+    
+    console.log('[AI Foundry] Raw conflict response:', content.substring(0, 200));
+    
+    // Strip markdown code blocks if present
+    let cleanedContent = stripMarkdownCodeBlocks(content);
+    
+    // Try to extract JSON from the response if it's wrapped in text
+    const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      cleanedContent = jsonMatch[0];
+    }
+    
+    console.log('[AI Foundry] Cleaned conflict response:', cleanedContent.substring(0, 200));
+    
+    const parsed = JSON.parse(cleanedContent);
+    if (!validateConflictSchema(parsed)) {
+      throw new Error('Invalid conflict schema received from AI model');
+    }
+    return parsed as ConflictDetectionResult;
+  } catch (error) {
+    console.error('[AI Foundry] ⚠️ Conflict detection AI failed or schema invalid. Falling back to deterministic logic.', error);
+    return detectConflictsDeterministic(assessments);
   }
 }
 
@@ -420,47 +484,196 @@ ${JSON.stringify(availability, null, 2)}
 
 Remember: Respond with ONLY valid JSON, no other text.`;
 
-  const response = await callAIFoundry({
-    deployment: DEPLOYMENTS.MISTRAL_LARGE,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ],
-    temperature: 0.5,
-    max_tokens: 4000,
-  });
-
-  const content = response.choices[0]?.message?.content;
-  
-  if (!content) {
-    throw new Error('No response from AI');
-  }
-  
-  console.log('[AI Foundry] Raw schedule response:', content.substring(0, 200));
-  
-  // Strip markdown code blocks if present
-  let cleanedContent = stripMarkdownCodeBlocks(content);
-  
-  // Try to extract JSON from the response if it's wrapped in text
-  const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    cleanedContent = jsonMatch[0];
-  }
-  
-  console.log('[AI Foundry] Cleaned schedule response:', cleanedContent.substring(0, 200));
-  
   try {
-    return JSON.parse(cleanedContent) as ScheduleGenerationResult;
-  } catch (error) {
-    console.error('[AI Foundry] Failed to parse schedule JSON:', error);
-    console.error('[AI Foundry] Content was:', cleanedContent);
+    const response = await callAIFoundry({
+      deployment: DEPLOYMENTS.MISTRAL_LARGE,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.5,
+      max_tokens: 4000,
+    });
+
+    const content = response.choices[0]?.message?.content;
     
-    // Return empty schedule instead of crashing
-    return {
-      study_blocks: [],
-      message: "I couldn't generate a schedule right now. Please try again.",
-    };
+    if (!content) {
+      throw new Error('No response from AI');
+    }
+    
+    console.log('[AI Foundry] Raw schedule response:', content.substring(0, 200));
+    
+    // Strip markdown code blocks if present
+    let cleanedContent = stripMarkdownCodeBlocks(content);
+    
+    // Try to extract JSON from the response if it's wrapped in text
+    const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      cleanedContent = jsonMatch[0];
+    }
+    
+    console.log('[AI Foundry] Cleaned schedule response:', cleanedContent.substring(0, 200));
+    
+    const parsed = JSON.parse(cleanedContent);
+    if (!validateScheduleSchema(parsed)) {
+      throw new Error('Invalid schedule schema received from AI model');
+    }
+    return parsed as ScheduleGenerationResult;
+  } catch (error) {
+    console.error('[AI Foundry] ⚠️ Schedule generation AI failed or schema invalid. Falling back to deterministic logic.', error);
+    return generateScheduleDeterministic(assessments, availability);
   }
+}
+
+// ============================================
+// Schema Validators & Fallback Algorithms
+// ============================================
+
+function validateConflictSchema(obj: any): obj is ConflictDetectionResult {
+  if (!obj || typeof obj !== 'object') return false;
+  if (!Array.isArray(obj.conflicts)) return false;
+  for (const c of obj.conflicts) {
+    if (typeof c.start_date !== 'string') return false;
+    if (typeof c.end_date !== 'string') return false;
+    if (!Array.isArray(c.assessment_ids)) return false;
+    if (
+      typeof c.severity !== 'string' ||
+      !['high', 'medium', 'low'].includes(c.severity)
+    ) return false;
+    if (typeof c.intervention !== 'string') return false;
+  }
+  return true;
+}
+
+function validateScheduleSchema(obj: any): obj is ScheduleGenerationResult {
+  if (!obj || typeof obj !== 'object') return false;
+  if (typeof obj.message !== 'string') return false;
+  if (!Array.isArray(obj.study_blocks)) return false;
+  for (const sb of obj.study_blocks) {
+    if (typeof sb.assessment_id !== 'string') return false;
+    if (typeof sb.start_at !== 'string') return false;
+    if (typeof sb.end_at !== 'string') return false;
+    if (typeof sb.description !== 'string') return false;
+  }
+  return true;
+}
+
+export function detectConflictsDeterministic(
+  assessments: Assessment[]
+): ConflictDetectionResult {
+  const sorted = [...assessments]
+    .filter((a) => a.due_at)
+    .sort((a, b) => new Date(a.due_at!).getTime() - new Date(b.due_at!).getTime());
+    
+  const conflicts: ConflictDetectionResult['conflicts'] = [];
+  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+  
+  for (let i = 0; i < sorted.length; i++) {
+    const a = sorted[i];
+    const aTime = new Date(a.due_at!).getTime();
+    const windowAssessments = [a];
+    
+    for (let j = i + 1; j < sorted.length; j++) {
+      const b = sorted[j];
+      const bTime = new Date(b.due_at!).getTime();
+      if (bTime - aTime <= sevenDaysMs) {
+        windowAssessments.push(b);
+      } else {
+        break;
+      }
+    }
+    
+    if (windowAssessments.length >= 2) {
+      const start = a.due_at!.split('T')[0];
+      const endDateObj = new Date(aTime + sevenDaysMs);
+      const end = endDateObj.toISOString().split('T')[0];
+      const assessmentIds = windowAssessments.map((wa) => wa.id);
+      
+      const exists = conflicts.some(
+        (c) =>
+          c.assessment_ids.length === assessmentIds.length &&
+          c.assessment_ids.every((id) => assessmentIds.includes(id))
+      );
+      
+      if (!exists) {
+        const severity = windowAssessments.length >= 3 ? ('high' as const) : ('medium' as const);
+        const titles = windowAssessments.map((wa) => wa.title).join(' and ');
+        conflicts.push({
+          start_date: start,
+          end_date: end,
+          assessment_ids: assessmentIds,
+          severity,
+          intervention: `Deterministic Fallback: Overload warning for ${titles}. Consider starting early!`,
+        });
+      }
+    }
+  }
+  
+  return { conflicts };
+}
+
+export function generateScheduleDeterministic(
+  assessments: Assessment[],
+  availability: AvailabilityInput
+): ScheduleGenerationResult {
+  const studyBlocks: ScheduleGenerationResult['study_blocks'] = [];
+  const now = new Date();
+  
+  const sorted = [...assessments]
+    .filter((a) => a.due_at)
+    .sort((a, b) => new Date(a.due_at!).getTime() - new Date(b.due_at!).getTime());
+    
+  const unavailableTimes = availability.unavailable_times || [];
+  const durationMin = availability.preferred_study_duration || 120;
+  
+  for (const assessment of sorted) {
+    const dueDate = new Date(assessment.due_at!);
+    const blocksNeeded = assessment.is_major ? 2 : 1;
+    let scheduledCount = 0;
+    
+    for (let daysBefore = 3; daysBefore >= 1 && scheduledCount < blocksNeeded; daysBefore--) {
+      const targetDate = new Date(dueDate.getTime() - daysBefore * 24 * 60 * 60 * 1000);
+      if (targetDate <= now) continue;
+      
+      const dayOfWeek = targetDate.toLocaleDateString('en-US', { weekday: 'long' });
+      const startDate = new Date(targetDate);
+      // Study slot: 15:00 local time
+      startDate.setHours(15, 0, 0, 0);
+      const endDate = new Date(startDate.getTime() + durationMin * 60 * 1000);
+      
+      const isUnavailable = unavailableTimes.some((ut) => {
+        const dayMatches =
+          ut.day.toLowerCase() === dayOfWeek.toLowerCase() ||
+          ut.day === targetDate.toISOString().split('T')[0];
+        if (!dayMatches) return false;
+        
+        const [uStartH, uStartM] = ut.start.split(':').map(Number);
+        const [uEndH, uEndM] = ut.end.split(':').map(Number);
+        
+        const uStartDate = new Date(targetDate);
+        uStartDate.setHours(uStartH, uStartM, 0, 0);
+        const uEndDate = new Date(targetDate);
+        uEndDate.setHours(uEndH, uEndM, 0, 0);
+        
+        return startDate < uEndDate && endDate > uStartDate;
+      });
+      
+      if (!isUnavailable) {
+        studyBlocks.push({
+          assessment_id: assessment.id,
+          start_at: startDate.toISOString(),
+          end_at: endDate.toISOString(),
+          description: `Study session for ${assessment.title} (Deterministic Fallback)`,
+        });
+        scheduledCount++;
+      }
+    }
+  }
+  
+  return {
+    study_blocks: studyBlocks,
+    message: `Scheduled ${studyBlocks.length} study blocks (deterministic fallback) based on your availability.`,
+  };
 }
 
 // ============================================

@@ -4,7 +4,7 @@
  */
 
 import { CosmosClient, Container, Database } from '@azure/cosmos';
-import type { User, Course, Assessment, StudyBlock, IntegrationLink } from '@/types';
+import type { User, Course, Assessment, StudyBlock, IntegrationLink, Proposal } from '@/types';
 
 // ============================================
 // Cosmos Client Singleton
@@ -64,6 +64,7 @@ export const CONTAINERS = {
   ASSESSMENTS: 'assessments',
   STUDY_BLOCKS: 'study_blocks',
   INTEGRATION_LINKS: 'integration_links',
+  PROPOSALS: 'proposals',
 } as const;
 
 // ============================================
@@ -374,4 +375,60 @@ export function generateDocumentHash(content: string): string {
   // Simple hash for deduplication
   // In production, use a proper hash function
   return Buffer.from(content).toString('base64').substring(0, 32);
+}
+
+// ============================================
+// Proposal Operations
+// ============================================
+
+let proposalsContainerPromise: Promise<Container> | null = null;
+
+export async function getProposalsContainer(): Promise<Container> {
+  if (!proposalsContainerPromise) {
+    const db = getDatabase();
+    console.log('[Cosmos] Initializing/creating proposals container...');
+    proposalsContainerPromise = db.containers
+      .createIfNotExists({ id: CONTAINERS.PROPOSALS, partitionKey: '/user_id' })
+      .then((res) => res.container);
+  }
+  return proposalsContainerPromise;
+}
+
+export async function createProposal(proposal: Proposal): Promise<Proposal> {
+  const container = await getProposalsContainer();
+  const { resource } = await container.items.create(proposal);
+  return resource as Proposal;
+}
+
+export async function getProposal(proposalId: string, userId: string): Promise<Proposal | null> {
+  const container = await getProposalsContainer();
+  try {
+    const { resource } = await container.item(proposalId, userId).read<Proposal>();
+    return resource || null;
+  } catch (error: unknown) {
+    if (isNotFoundError(error)) return null;
+    throw error;
+  }
+}
+
+export async function updateProposal(
+  proposalId: string,
+  userId: string,
+  updates: Partial<Proposal>
+): Promise<Proposal> {
+  const container = await getProposalsContainer();
+  const existing = await getProposal(proposalId, userId);
+  
+  if (!existing) {
+    throw new Error(`Proposal ${proposalId} not found`);
+  }
+  
+  const updated = {
+    ...existing,
+    ...updates,
+    updated_at: new Date().toISOString(),
+  };
+  
+  const { resource } = await container.item(proposalId, userId).replace(updated);
+  return resource as Proposal;
 }
