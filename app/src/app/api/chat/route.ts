@@ -41,7 +41,12 @@ export async function POST(request: NextRequest) {
         trimmedMessage
       );
 
-    if (isPromptInjection || !isLikelyAcademic) {
+    const isGreetingOrPolite =
+      /\b(hi|hello|hey|yo|greetings|good\s+morning|good\s+afternoon|good\s+evening|whats\s+up|what's\s+up|howdy|whats\s+good|what's\s+good|kamusta|kumusta|salamat|thanks|thank\s+you|who\s+are\s+you|what\s+can\s+you\s+do|help)\b/i.test(
+        trimmedMessage
+      ) || trimmedMessage.length <= 15;
+
+    if (isPromptInjection || (!isLikelyAcademic && !isGreetingOrPolite)) {
       return NextResponse.json(
         successResponse({
           message:
