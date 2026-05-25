@@ -222,9 +222,8 @@ export async function POST(request: NextRequest) {
       studyBlocks = createdBlocks.map((block) => {
         // Find the matching assessment to get its title
         const assessment = upcomingAssessments.find((a) => a.id === block.assessment_id);
-        const description = assessment 
-          ? `Study: ${assessment.title}` 
-          : result.study_blocks.find((b) => b.assessment_id === block.assessment_id)?.description || "Study session";
+        // Always use the assessment title for the description
+        const description = assessment?.title || "Study session";
         
         return {
           assessment_id: block.assessment_id || "",
