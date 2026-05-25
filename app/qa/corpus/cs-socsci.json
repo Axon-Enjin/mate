@@ -1,0 +1,34 @@
+{
+  "_meta": {
+    "source_file": "CS-SOCSCI-SocSc12-TANGARA_A-F1-2022-1.pdf",
+    "course": "SocSci 12 – The Contemporary World",
+    "term": "2022-2023 1st Semester",
+    "note": "Golden fixture — hand-curated from the source PDF. Only assessments with unambiguous dates are included."
+  },
+  "course": {
+    "name": "The Contemporary World",
+    "term_label": "AY 2022-2023 1st Semester"
+  },
+  "assessments": [
+    {
+      "title": "Quizzes",
+      "due_at": null,
+      "is_major": false
+    },
+    {
+      "title": "Long Exams",
+      "due_at": null,
+      "is_major": true
+    },
+    {
+      "title": "Recitation / Participation",
+      "due_at": null,
+      "is_major": false
+    },
+    {
+      "title": "Final Exam",
+      "due_at": null,
+      "is_major": true
+    }
+  ]
+}

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import ExtractionReview from "@/components/ExtractionReview";
+import ManualEntryForm from "@/components/ManualEntryForm";
 import type { Proposal, Assessment } from "@/types";
 
 export default function ReviewPage() {
@@ -116,7 +117,7 @@ export default function ReviewPage() {
   if (error) {
     return (
       <div className="flex flex-col flex-1 items-center justify-center p-4 sm:p-6">
-        <div className="w-full max-w-md">
+        <div className="w-full max-w-xl">
           <div className="bg-surface border border-error rounded-lg shadow-md p-8 text-center">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-error/10 mb-4">
               <svg
@@ -134,23 +135,31 @@ export default function ReviewPage() {
               </svg>
             </div>
             <h2 className="text-xl font-semibold text-text mb-2">Extraction Failed</h2>
-            <p className="text-text-muted mb-6">
+            <p className="text-text-muted mb-4">
               {error}
             </p>
             <button 
               onClick={() => router.push("/")} 
               className="
-                inline-flex items-center gap-2 px-6 py-3
-                bg-primary hover:bg-primary-hover text-white font-medium rounded-lg
-                transition-all duration-150 shadow-sm hover:shadow
+                inline-flex items-center gap-2 px-5 py-2.5 text-sm
+                border border-border rounded-lg text-text hover:bg-surface-emphasis
+                transition-all duration-150
               "
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
-              Try Again
+              Try a different file
             </button>
           </div>
+
+          <ManualEntryForm
+            proposalId={proposalId}
+            onComplete={() => {
+              setError(null);
+              setLoading(true);
+            }}
+          />
         </div>
       </div>
     );

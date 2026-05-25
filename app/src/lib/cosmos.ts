@@ -3,6 +3,7 @@
  * Singleton client with CRUD operations for all containers
  */
 
+import { createHash } from 'crypto';
 import { CosmosClient, Container, Database } from '@azure/cosmos';
 import type { User, Course, Assessment, StudyBlock, IntegrationLink, Proposal } from '@/types';
 
@@ -328,6 +329,21 @@ export async function getUserStudyBlocks(userId: string): Promise<StudyBlock[]> 
   return resources;
 }
 
+export async function updateStudyBlock(
+  blockId: string,
+  userId: string,
+  updates: Partial<StudyBlock>
+): Promise<StudyBlock> {
+  const container = getContainer(CONTAINERS.STUDY_BLOCKS);
+  const { resource: existing } = await container.item(blockId, userId).read<StudyBlock>();
+  if (!existing) {
+    throw new Error(`Study block ${blockId} not found`);
+  }
+  const updated = { ...existing, ...updates };
+  const { resource } = await container.item(blockId, userId).replace(updated);
+  return resource as StudyBlock;
+}
+
 // ============================================
 // Integration Link Operations
 // ============================================
@@ -371,10 +387,22 @@ export async function testConnection(): Promise<boolean> {
   }
 }
 
-export function generateDocumentHash(content: string): string {
-  // Simple hash for deduplication
-  // In production, use a proper hash function
-  return Buffer.from(content).toString('base64').substring(0, 32);
+export function generateDocumentHash(buffer: Buffer): string {
+  return createHash('sha256').update(buffer).digest('hex');
+}
+
+export async function getCourseByHash(userId: string, hash: string): Promise<Course | null> {
+  const container = getContainer(CONTAINERS.COURSES);
+  const { resources } = await container.items
+    .query<Course>({
+      query: 'SELECT * FROM c WHERE c.user_id = @userId AND c.source_doc_hash = @hash',
+      parameters: [
+        { name: '@userId', value: userId },
+        { name: '@hash', value: hash },
+      ],
+    })
+    .fetchAll();
+  return resources[0] ?? null;
 }
 
 // ============================================

@@ -31,6 +31,7 @@ export default function SchedulePlanner({
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [approvedBlockIds, setApprovedBlockIds] = useState<Set<string>>(new Set());
   const [schedule, setSchedule] = useState<{
     study_blocks: StudyBlock[];
     message: string;
@@ -130,7 +131,7 @@ export default function SchedulePlanner({
     try {
       const body: any = {
         use_outlook: useOutlook,
-        save_proposal: false,
+        save_proposal: true,
       };
 
       if (!useOutlook || unavailableTimes.length > 0) {
@@ -142,12 +143,28 @@ export default function SchedulePlanner({
 
       const result = await onGenerateSchedule(body);
       setSchedule(result);
+      setApprovedBlockIds(new Set());
     } catch (error) {
       console.error("Schedule generation error:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to generate schedule";
       setError(errorMessage);
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const approveBlock = async (blockId: string) => {
+    try {
+      const response = await fetch(`/api/schedule/${blockId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ state: "approved" }),
+      });
+      if (!response.ok) throw new Error("Failed to approve block");
+      setApprovedBlockIds((prev) => new Set([...prev, blockId]));
+    } catch (err) {
+      console.error("Approve block error:", err);
+      setError(err instanceof Error ? err.message : "Failed to approve study block");
     }
   };
 
@@ -490,6 +507,29 @@ export default function SchedulePlanner({
                         })}
                       </span>
                     </div>
+                  </div>
+                  {/* Per-block save/approve controls */}
+                  <div className="flex-shrink-0 flex items-center gap-2">
+                    {block.id && (
+                      approvedBlockIds.has(block.id) ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-success bg-success/10 border border-success/20 rounded-full px-2.5 py-1">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                          </svg>
+                          Approved
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => approveBlock(block.id!)}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-primary border border-primary/40 rounded-full px-2.5 py-1 hover:bg-primary/5 transition-colors"
+                        >
+                          Approve
+                        </button>
+                      )
+                    )}
+                    {!block.id && (
+                      <span className="text-xs text-text-muted italic">Saving...</span>
+                    )}
                   </div>
                 </div>
               ))}

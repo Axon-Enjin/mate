@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractFromDocument } from "@/lib/ai-foundry";
 import { successResponse, errorResponse, logError, getErrorMessage } from "@/lib/utils";
-import { createProposal, updateProposal, getProposal } from "@/lib/cosmos";
+import { createProposal, updateProposal, getProposal, generateDocumentHash, getCourseByHash } from "@/lib/cosmos";
 import { requireUserId } from "@/lib/auth-session";
 import type { Proposal } from "@/types";
 
@@ -52,6 +52,24 @@ export async function POST(request: NextRequest) {
     // Generate proposal ID
     const proposalId = crypto.randomUUID();
 
+    // Read file buffer early for hash + extraction
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Deduplication: check if this exact file was already uploaded
+    const fileHash = generateDocumentHash(buffer);
+    const existingCourse = await getCourseByHash(userId, fileHash);
+    if (existingCourse) {
+      return NextResponse.json(
+        successResponse({
+          duplicate: true,
+          existingCourseId: existingCourse.id,
+          message: `This syllabus has already been uploaded (${existingCourse.name}).`,
+        }),
+        { status: 409 }
+      );
+    }
+
     // Store initial proposal state
     const initialProposal: Proposal = {
       id: proposalId,
@@ -64,7 +82,8 @@ export async function POST(request: NextRequest) {
     await createProposal(initialProposal);
 
     // Start async extraction (don't await - return immediately)
-    processExtraction(proposalId, file, userId).catch((error) => {
+    // Pass pre-read buffer to avoid re-reading
+    processExtraction(proposalId, file, userId, buffer).catch((error) => {
       logError("Extraction processing", error);
       updateProposal(proposalId, userId, {
         status: "failed",
@@ -88,24 +107,31 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function processExtraction(proposalId: string, file: File, userId: string) {
+async function processExtraction(proposalId: string, file: File, userId: string, preReadBuffer?: Buffer) {
   try {
     console.log('[Extraction] 🚀 Starting for proposal:', proposalId);
     console.log('[Extraction] File:', file.name, file.type, file.size, 'bytes');
     
-    // Read file content
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    console.log('[Extraction] ✅ Buffer created, size:', buffer.length);
+    // Read file content (use pre-read buffer if available from dedup check)
+    const buffer = preReadBuffer ?? Buffer.from(await file.arrayBuffer());
+    console.log('[Extraction] ✅ Buffer ready, size:', buffer.length);
     
-    // Extract text from PDF
+    // Extract text from document
     let documentContent: string;
     if (file.type === 'application/pdf') {
       console.log('[Extraction] 📄 PDF detected, extracting text...');
       const { extractAndCleanPDF } = await import('@/lib/pdf-extractor');
       documentContent = await extractAndCleanPDF(buffer);
       console.log('[Extraction] ✅ Text extracted, length:', documentContent.length);
+    } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      console.log('[Extraction] 📝 DOCX detected, extracting via mammoth...');
+      const mammoth = await import('mammoth');
+      const { value } = await mammoth.extractRawText({ buffer });
+      documentContent = value;
+      console.log('[Extraction] ✅ DOCX text extracted, length:', documentContent.length);
     } else {
+      // Legacy .doc — best-effort UTF-8 (usually unreadable; user warned in UI)
+      console.log('[Extraction] ⚠️ Legacy .doc format — attempting UTF-8 fallback...');
       documentContent = buffer.toString('utf-8');
     }
 
