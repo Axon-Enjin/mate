@@ -1,6 +1,8 @@
-# Mate
-
 <div align="center">
+
+<img src="app/public/mascot-mate.svg" alt="Mate Mascot" width="240" />
+
+# Mate
 
 **Autonomous Academic Orchestrator for Filipino University Students.**
 
@@ -13,6 +15,8 @@ A Microsoft Copilot–powered SaaS that reads every syllabus, names the weeks wh
   <img src="https://img.shields.io/badge/Cosmos%20DB-NoSQL-3F8624" alt="Cosmos Badge" />
   <img src="https://img.shields.io/badge/Hackathon-KPMG%20Academic%20Innovation%202026-EF3340" alt="Hackathon Badge" />
 </p>
+
+<sub>👋 Meet Mate — your calm, judgment-free study partner.</sub>
 
 </div>
 
@@ -381,4 +385,12 @@ The 5-minute video follows this order to showcase the full pipeline (full shot l
 
 [MIT](LICENSE) for the application code. Documentation is part of the Mate project repository.
 
-KPMG Academic Innovation Challenge 2026 · © 2026 Axon Enjin
+---
+
+<div align="center">
+
+<img src="app/public/logo-mate.svg" alt="Mate" width="160" />
+
+<sub>KPMG Academic Innovation Challenge 2026 · © 2026 Axon Enjin</sub>
+
+</div>
