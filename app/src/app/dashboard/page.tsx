@@ -80,16 +80,20 @@ export default function DashboardPage() {
         body: JSON.stringify(body),
       });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
-      throw new Error(errorData.error || "Failed to generate schedule");
-    }
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(errorData.error || "Failed to generate schedule");
+      }
 
-    const data = await response.json();
-    return {
-      study_blocks: data.data?.study_blocks || [],
-      message: data.data?.message || "Schedule generated!",
-    };
+      const data = await response.json();
+      return {
+        study_blocks: data.data?.study_blocks || [],
+        message: data.data?.message || "Schedule generated!",
+      };
+    } catch (error) {
+      console.error("Generate schedule error:", error);
+      throw error;
+    }
   };
 
   const toggleChat = () => {
@@ -148,18 +152,6 @@ export default function DashboardPage() {
       ),
     },
   ];
-      const data = await response.json();
-      console.log("Schedule generated:", data);
-      
-      return {
-        study_blocks: data.data?.study_blocks || [],
-        message: data.data?.message || "Schedule generated!",
-      };
-    } catch (error) {
-      console.error("Generate schedule error:", error);
-      throw error;
-    }
-  };
 
   if (loading) {
     return (
