@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { proposals } from "@/lib/proposals-store";
+import { getProposal, updateProposal } from "@/lib/cosmos";
+import { requireUserId } from "@/lib/auth-session";
 import { errorResponse, logError } from "@/lib/utils";
 
 export async function GET(
@@ -7,8 +8,16 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const userId = await requireUserId();
+    if (!userId) {
+      return NextResponse.json(
+        errorResponse("Unauthorized - Please sign in"),
+        { status: 401 }
+      );
+    }
+
     const { id } = await params;
-    const proposal = proposals.get(id);
+    const proposal = await getProposal(id, userId);
 
     if (!proposal) {
       return NextResponse.json(
@@ -32,8 +41,16 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const userId = await requireUserId();
+    if (!userId) {
+      return NextResponse.json(
+        errorResponse("Unauthorized - Please sign in"),
+        { status: 401 }
+      );
+    }
+
     const { id } = await params;
-    const proposal = proposals.get(id);
+    const proposal = await getProposal(id, userId);
 
     if (!proposal) {
       return NextResponse.json(
@@ -43,15 +60,7 @@ export async function PATCH(
     }
 
     const updates = await request.json();
-    
-    // Update proposal
-    const updatedProposal = {
-      ...proposal,
-      ...updates,
-      updated_at: new Date().toISOString(),
-    };
-
-    proposals.set(id, updatedProposal);
+    const updatedProposal = await updateProposal(id, userId, updates);
 
     return NextResponse.json(updatedProposal);
   } catch (error) {

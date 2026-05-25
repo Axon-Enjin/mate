@@ -41,7 +41,12 @@ export async function POST(request: NextRequest) {
         trimmedMessage
       );
 
-    if (isPromptInjection || !isLikelyAcademic) {
+    const isGreetingOrPolite =
+      /\b(hi|hello|hey|yo|greetings|good\s+morning|good\s+afternoon|good\s+evening|whats\s+up|what's\s+up|howdy|whats\s+good|what's\s+good|kamusta|kumusta|salamat|thanks|thank\s+you|who\s+are\s+you|what\s+can\s+you\s+do|help)\b/i.test(
+        trimmedMessage
+      ) || trimmedMessage.length <= 15;
+
+    if (isPromptInjection || (!isLikelyAcademic && !isGreetingOrPolite)) {
       return NextResponse.json(
         successResponse({
           message:
@@ -150,6 +155,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(successResponse(responseData));
   } catch (error) {
     logError("Chat processing", error);
+    if (error instanceof Error) {
+      const message = error.message || "";
+      if (
+        message.includes("fetch failed") ||
+        message.includes("Connect Timeout") ||
+        message.includes("UND_ERR_CONNECT_TIMEOUT")
+      ) {
+        return NextResponse.json(
+          successResponse({
+            message:
+              "I'm having trouble reaching the AI service right now. Please try again in a minute.",
+            intent: "general",
+          }),
+          { status: 200 }
+        );
+      }
+    }
     return NextResponse.json(
       errorResponse("Failed to process message"),
       { status: 500 }
