@@ -217,6 +217,26 @@ export interface ReminderActionPayload {
   new_end_at?: string;
 }
 
+export interface ReminderCandidate {
+  reminder_key: string;
+  study_block_id: string;
+  user_id: string;
+  assessment_id?: string;
+  start_at: string;
+  end_at: string;
+  description: string;
+  reminder_window_minutes: number;
+}
+
+export interface ReminderListResponse {
+  reminder_window: {
+    start_at: string;
+    end_at: string;
+    minutes_before_start: number;
+  };
+  reminders: ReminderCandidate[];
+}
+
 // ============================================
 // Chat / Lateral Language Types
 // ============================================

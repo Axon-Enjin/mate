@@ -25,9 +25,10 @@ interface MateChatProps {
 }
 
 const QUICK_PROMPTS = [
-  "Help me plan my week",
+  "What's my schedule this week?",
   "Any deadline conflicts?",
   "What's due soon?",
+  "Help me plan my week",
 ];
 
 const UNSAFE_PROMPT_PATTERNS = [

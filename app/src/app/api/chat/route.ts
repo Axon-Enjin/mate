@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserAssessments, getUserCourses } from "@/lib/cosmos";
+import { getUserAssessments, getUserCourses, getUserStudyBlocks } from "@/lib/cosmos";
 import { processNaturalLanguage, detectConflicts, generateSchedule } from "@/lib/ai-foundry";
 import { requireUserId } from "@/lib/auth-session";
 import { successResponse, errorResponse, logError } from "@/lib/utils";
@@ -57,14 +57,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const [courses, assessments] = await Promise.all([
+    const [courses, assessments, studyBlocks] = await Promise.all([
       getUserCourses(userId),
       getUserAssessments(userId),
+      getUserStudyBlocks(userId),
     ]);
 
     const approvedAssessments = assessments.filter(
       (a) => a.review_state === "approved"
     );
+
+    // Get upcoming study blocks (approved or proposed)
+    const now = new Date();
+    const upcomingStudyBlocks = studyBlocks
+      .filter((block) => new Date(block.start_at) > now)
+      .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+      .slice(0, 10); // Limit to next 10 blocks
+
+    // Detect conflicts
+    const majorAssessments = approvedAssessments.filter(
+      (a) => a.is_major && a.due_at
+    );
+    let conflictWindows: any[] = [];
+    if (majorAssessments.length >= 2) {
+      const conflictResult = await detectConflicts(majorAssessments);
+      conflictWindows = conflictResult.conflicts;
+    }
 
     const context = {
       courses: courses.map((c) => ({
@@ -78,8 +96,26 @@ export async function POST(request: NextRequest) {
         due_at: a.due_at,
         is_major: a.is_major,
       })),
+      study_blocks: upcomingStudyBlocks.map((block) => {
+        const assessment = approvedAssessments.find((a) => a.id === block.assessment_id);
+        return {
+          id: block.id,
+          assessment_title: assessment?.title || "Study session",
+          start_at: block.start_at,
+          end_at: block.end_at,
+          state: block.state,
+        };
+      }),
+      conflicts: conflictWindows.map((conflict) => ({
+        start_date: conflict.start_date,
+        end_date: conflict.end_date,
+        assessment_count: conflict.assessment_ids?.length || 0,
+        severity: conflict.severity,
+      })),
       assessment_count: approvedAssessments.length,
       course_count: courses.length,
+      study_block_count: upcomingStudyBlocks.length,
+      conflict_count: conflictWindows.length,
     };
 
     let analysis;

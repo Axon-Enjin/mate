@@ -219,13 +219,21 @@ export async function POST(request: NextRequest) {
         )
       );
 
-      studyBlocks = createdBlocks.map((block) => ({
-        assessment_id: block.assessment_id || "",
-        start_at: block.start_at,
-        end_at: block.end_at,
-        description: "Study block",
-        id: block.id,
-      }));
+      studyBlocks = createdBlocks.map((block) => {
+        // Find the matching assessment to get its title
+        const assessment = upcomingAssessments.find((a) => a.id === block.assessment_id);
+        const description = assessment 
+          ? `Study: ${assessment.title}` 
+          : result.study_blocks.find((b) => b.assessment_id === block.assessment_id)?.description || "Study session";
+        
+        return {
+          assessment_id: block.assessment_id || "",
+          start_at: block.start_at,
+          end_at: block.end_at,
+          description,
+          id: block.id,
+        };
+      });
     }
 
     return NextResponse.json(
