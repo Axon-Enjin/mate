@@ -5,14 +5,16 @@ import type { Proposal, Assessment } from "@/types";
 
 interface ExtractionReviewProps {
   proposal: Proposal;
-  onApprove: () => void;
+  onApprove: () => void | Promise<void>;
   onEdit: (assessmentId: string, updates: Partial<Assessment>) => void;
+  isApproving?: boolean;
 }
 
 export default function ExtractionReview({
   proposal,
   onApprove,
   onEdit,
+  isApproving = false,
 }: ExtractionReviewProps) {
   const [showMetrics, setShowMetrics] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -104,7 +106,7 @@ export default function ExtractionReview({
 
       {/* Assessments List */}
       <div className="space-y-3">
-        {proposal.assessments.map((assessment, index) => (
+        {proposal.assessments.map((assessment) => (
           <div
             key={assessment.id}
             className={`
@@ -260,7 +262,7 @@ export default function ExtractionReview({
       <div className="bg-surface border border-border rounded-lg shadow-sm p-6">
         <button
           onClick={onApprove}
-          disabled={needsReviewCount > 0}
+          disabled={needsReviewCount > 0 || isApproving || proposal.status === "approved"}
           className="
             w-full flex items-center justify-center gap-2 px-6 py-3
             bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg
@@ -269,7 +271,12 @@ export default function ExtractionReview({
             min-h-[48px]
           "
         >
-          {needsReviewCount > 0 ? (
+          {isApproving ? (
+            <>
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+              <span>Saving deadlines...</span>
+            </>
+          ) : needsReviewCount > 0 ? (
             <>
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />

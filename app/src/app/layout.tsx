@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
+import SessionProvider from "@/components/SessionProvider";
 import "./globals.css";
 
 const inter = Inter({
@@ -11,6 +12,12 @@ const inter = Inter({
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
+  display: "swap",
+});
+
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-display",
   display: "swap",
 });
 
@@ -26,8 +33,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full">
-      <body className={`${inter.variable} ${jetbrainsMono.variable} min-h-full flex flex-col`}>
-        {children}
+      <body
+        className={`${inter.variable} ${jetbrainsMono.variable} ${fraunces.variable} min-h-full flex flex-col`}
+      >
+        <SessionProvider>{children}</SessionProvider>
       </body>
     </html>
   );

@@ -13,6 +13,7 @@ export default function ReviewPage() {
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isApproving, setIsApproving] = useState(false);
 
   useEffect(() => {
     if (!proposalId) return;
@@ -83,7 +84,9 @@ export default function ReviewPage() {
   };
 
   const handleApprove = async () => {
-    if (!proposal) return;
+    if (!proposal || isApproving || proposal.status === "approved") return;
+
+    setIsApproving(true);
 
     try {
       const response = await fetch(`/api/proposals/${proposalId}/approve`, {
@@ -91,17 +94,22 @@ export default function ReviewPage() {
       });
 
       if (!response.ok) {
+        if (response.status === 409) {
+          return;
+        }
         throw new Error("Failed to approve proposal");
       }
 
-      const result = await response.json();
-      
-      // Show success message
-      alert(result.data?.message || "Deadlines approved successfully!");
-      router.push("/");
+      const data = await response.json();
+      if (data.data?.proposal) {
+        setProposal(data.data.proposal);
+      }
+
+      router.push("/dashboard");
     } catch (err) {
       console.error("Approve error:", err);
       alert("Failed to approve deadlines");
+      setIsApproving(false);
     }
   };
 
@@ -224,6 +232,7 @@ export default function ReviewPage() {
             proposal={proposal}
             onApprove={handleApprove}
             onEdit={handleEdit}
+            isApproving={isApproving}
           />
         </div>
       </div>

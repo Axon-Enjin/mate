@@ -19,9 +19,13 @@ function getClient(): CosmosClient {
     const key = process.env.COSMOS_KEY;
 
     if (!endpoint || !key) {
+      console.error('[Cosmos] Missing environment variables!');
+      console.error('[Cosmos] COSMOS_ENDPOINT:', endpoint ? 'SET' : 'MISSING');
+      console.error('[Cosmos] COSMOS_KEY:', key ? 'SET (length: ' + key.length + ')' : 'MISSING');
       throw new Error('COSMOS_ENDPOINT and COSMOS_KEY must be set in environment variables');
     }
 
+    console.log('[Cosmos] Initializing client with endpoint:', endpoint);
     client = new CosmosClient({ endpoint, key });
   }
   return client;
@@ -30,12 +34,14 @@ function getClient(): CosmosClient {
 function getDatabase(): Database {
   if (!database) {
     const dbName = process.env.COSMOS_DATABASE || 'mate-dev-db';
+    console.log('[Cosmos] Getting database:', dbName);
     database = getClient().database(dbName);
   }
   return database;
 }
 
 function getContainer(containerName: string): Container {
+  console.log('[Cosmos] Getting container:', containerName);
   return getDatabase().container(containerName);
 }
 
@@ -97,6 +103,21 @@ export async function getUserByAuthSubject(authSubject: string): Promise<User | 
     .fetchAll();
   
   return resources[0] || null;
+}
+
+export async function updateUser(
+  userId: string,
+  updates: Partial<User>
+): Promise<User> {
+  const existing = await getUser(userId);
+  if (!existing) {
+    throw new Error(`User ${userId} not found`);
+  }
+
+  const container = getContainer(CONTAINERS.USERS);
+  const updated = { ...existing, ...updates };
+  const { resource } = await container.item(userId, userId).replace(updated);
+  return resource as User;
 }
 
 // ============================================
@@ -199,14 +220,28 @@ export async function updateAssessment(
 
 export async function getUserAssessments(userId: string): Promise<Assessment[]> {
   const container = getContainer(CONTAINERS.ASSESSMENTS);
-  const { resources } = await container.items
-    .query<Assessment>({
-      query: 'SELECT * FROM c WHERE c.user_id = @userId ORDER BY c.due_at',
-      parameters: [{ name: '@userId', value: userId }],
-    })
-    .fetchAll();
   
-  return resources;
+  try {
+    console.log('[Cosmos] Querying assessments for user:', userId);
+    
+    const { resources } = await container.items
+      .query<Assessment>({
+        query: 'SELECT * FROM c WHERE c.user_id = @userId ORDER BY c.due_at',
+        parameters: [{ name: '@userId', value: userId }],
+      })
+      .fetchAll();
+    
+    console.log('[Cosmos] Found', resources.length, 'assessments');
+    
+    return resources;
+  } catch (error) {
+    console.error('[Cosmos] Error querying assessments:', error);
+    if (error instanceof Error) {
+      console.error('[Cosmos] Error message:', error.message);
+      console.error('[Cosmos] Error stack:', error.stack);
+    }
+    throw error;
+  }
 }
 
 export async function getCourseAssessments(courseId: string, userId: string): Promise<Assessment[]> {
@@ -222,6 +257,32 @@ export async function getCourseAssessments(courseId: string, userId: string): Pr
     .fetchAll();
   
   return resources;
+}
+
+export async function deleteAssessment(assessmentId: string, userId: string): Promise<void> {
+  const container = getContainer(CONTAINERS.ASSESSMENTS);
+  await container.item(assessmentId, userId).delete();
+}
+
+export async function deleteCourseWithAssessments(
+  courseId: string,
+  userId: string
+): Promise<{ deleted_assessments: number }> {
+  const course = await getCourse(courseId, userId);
+  if (!course) {
+    throw new Error(`Course ${courseId} not found`);
+  }
+
+  const assessments = await getCourseAssessments(courseId, userId);
+
+  for (const assessment of assessments) {
+    await deleteAssessment(assessment.id, userId);
+  }
+
+  const container = getContainer(CONTAINERS.COURSES);
+  await container.item(courseId, userId).delete();
+
+  return { deleted_assessments: assessments.length };
 }
 
 export async function approveAssessments(assessmentIds: string[], userId: string): Promise<Assessment[]> {

@@ -3,7 +3,15 @@
  * Wrapper for GPT-5, Mistral-Large-3, and mistral-document-ai-2512
  */
 
-import type { AIMessage, ExtractionResult, Assessment, AvailabilityInput } from '@/types';
+import type {
+  AIMessage,
+  ExtractionResult,
+  Assessment,
+  AvailabilityInput,
+  ChatAnalysis,
+  ChatIntent,
+  ChatTurn,
+} from '@/types';
 
 // ============================================
 // Configuration
@@ -13,7 +21,7 @@ const AI_FOUNDRY_ENDPOINT = process.env.AI_FOUNDRY_ENDPOINT!;
 const AI_FOUNDRY_KEY = process.env.AI_FOUNDRY_KEY!;
 
 const DEPLOYMENTS = {
-  GPT5: process.env.GPT5_DEPLOYMENT_NAME || 'gpt-5-deployment',
+  GPT5: process.env.GPT5_DEPLOYMENT_NAME || 'gpt-5',
   MISTRAL_LARGE: process.env.MISTRAL_LARGE_DEPLOYMENT_NAME || 'Mistral-Large-3-deployment',
   MISTRAL_DOCUMENT: process.env.MISTRAL_DOCUMENT_DEPLOYMENT_NAME || 'mistral-document-ai-2512-deployment',
 };
@@ -29,6 +37,7 @@ interface CompletionRequest {
   messages: AIMessage[];
   temperature?: number;
   max_tokens?: number;
+  max_completion_tokens?: number;
   response_format?: { type: 'json_object' | 'text' };
 }
 
@@ -66,16 +75,24 @@ async function callAIFoundry(request: CompletionRequest): Promise<CompletionResp
   console.log('[AI Foundry] Model:', request.deployment);
   console.log('[AI Foundry] Messages:', request.messages.length);
   console.log('[AI Foundry] Temperature:', request.temperature ?? 0.7);
-  console.log('[AI Foundry] Max tokens:', request.max_tokens ?? 4000);
+  
+  // Check if model is GPT-5 (uses different parameter names)
+  const isGPT5 = request.deployment.toLowerCase().includes('gpt-5');
+  
+  // GPT-5 uses max_completion_tokens, others use max_tokens
+  const maxTokensParam = isGPT5 ? 'max_completion_tokens' : 'max_tokens';
+  const maxTokensValue = request.max_completion_tokens ?? request.max_tokens ?? 4000;
+  
+  console.log('[AI Foundry] Max tokens param:', maxTokensParam, '=', maxTokensValue);
   
   // Check if model supports JSON mode (GPT models do, Mistral may not)
   const supportsJsonMode = request.deployment.toLowerCase().includes('gpt');
   
-  const requestBody = {
+  const requestBody: Record<string, unknown> = {
     model: request.deployment, // Model/deployment name
     messages: request.messages,
     temperature: request.temperature ?? 0.7,
-    max_tokens: request.max_tokens ?? 4000,
+    [maxTokensParam]: maxTokensValue,
     // Only add response_format for models that support it
     ...(supportsJsonMode && request.response_format && { 
       response_format: request.response_format 
@@ -295,6 +312,8 @@ A conflict is when 2 or more major assessments (is_major=true) fall within a 7-d
 
 For each conflict, suggest a concrete early-intervention action.
 
+CRITICAL: You MUST respond with ONLY valid JSON. No explanations, no markdown, just pure JSON.
+
 Return JSON format:
 {
   "conflicts": [
@@ -308,20 +327,46 @@ Return JSON format:
   ]
 }`;
 
-  const userPrompt = `Analyze these assessments for conflicts:\n\n${JSON.stringify(assessments, null, 2)}`;
+  const userPrompt = `Analyze these assessments for conflicts:\n\n${JSON.stringify(assessments, null, 2)}\n\nRemember: Respond with ONLY valid JSON, no other text.`;
 
   const response = await callAIFoundry({
-    deployment: DEPLOYMENTS.GPT5,
+    deployment: DEPLOYMENTS.MISTRAL_LARGE,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ],
     temperature: 0.3,
-    response_format: { type: 'json_object' },
+    max_tokens: 4000,
   });
 
   const content = response.choices[0]?.message?.content;
-  return JSON.parse(content || '{"conflicts":[]}') as ConflictDetectionResult;
+  
+  if (!content) {
+    throw new Error('No response from AI');
+  }
+  
+  console.log('[AI Foundry] Raw conflict response:', content.substring(0, 200));
+  
+  // Strip markdown code blocks if present
+  let cleanedContent = stripMarkdownCodeBlocks(content);
+  
+  // Try to extract JSON from the response if it's wrapped in text
+  const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    cleanedContent = jsonMatch[0];
+  }
+  
+  console.log('[AI Foundry] Cleaned conflict response:', cleanedContent.substring(0, 200));
+  
+  try {
+    return JSON.parse(cleanedContent) as ConflictDetectionResult;
+  } catch (error) {
+    console.error('[AI Foundry] Failed to parse conflict JSON:', error);
+    console.error('[AI Foundry] Content was:', cleanedContent);
+    
+    // Return empty conflicts instead of crashing
+    return { conflicts: [] };
+  }
 }
 
 // ============================================
@@ -350,6 +395,8 @@ Given upcoming assessments and student availability, propose study blocks that:
 3. Respect preferred study duration
 4. Are realistic and achievable
 
+CRITICAL: You MUST respond with ONLY valid JSON. No explanations, no markdown, just pure JSON.
+
 Return JSON format:
 {
   "study_blocks": [
@@ -369,56 +416,159 @@ Assessments:
 ${JSON.stringify(assessments, null, 2)}
 
 Availability:
-${JSON.stringify(availability, null, 2)}`;
+${JSON.stringify(availability, null, 2)}
+
+Remember: Respond with ONLY valid JSON, no other text.`;
 
   const response = await callAIFoundry({
-    deployment: DEPLOYMENTS.GPT5,
+    deployment: DEPLOYMENTS.MISTRAL_LARGE,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ],
     temperature: 0.5,
-    response_format: { type: 'json_object' },
+    max_tokens: 4000,
   });
 
   const content = response.choices[0]?.message?.content;
-  return JSON.parse(
-    content || '{"study_blocks":[],"message":"No schedule generated"}'
-  ) as ScheduleGenerationResult;
+  
+  if (!content) {
+    throw new Error('No response from AI');
+  }
+  
+  console.log('[AI Foundry] Raw schedule response:', content.substring(0, 200));
+  
+  // Strip markdown code blocks if present
+  let cleanedContent = stripMarkdownCodeBlocks(content);
+  
+  // Try to extract JSON from the response if it's wrapped in text
+  const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    cleanedContent = jsonMatch[0];
+  }
+  
+  console.log('[AI Foundry] Cleaned schedule response:', cleanedContent.substring(0, 200));
+  
+  try {
+    return JSON.parse(cleanedContent) as ScheduleGenerationResult;
+  } catch (error) {
+    console.error('[AI Foundry] Failed to parse schedule JSON:', error);
+    console.error('[AI Foundry] Content was:', cleanedContent);
+    
+    // Return empty schedule instead of crashing
+    return {
+      study_blocks: [],
+      message: "I couldn't generate a schedule right now. Please try again.",
+    };
+  }
 }
 
 // ============================================
 // Lateral Language Processing
 // ============================================
 
-export async function processNaturalLanguage(
-  userMessage: string,
-  context: Record<string, unknown>
-): Promise<string> {
-  const systemPrompt = `You are Mate, an autonomous academic assistant for Filipino university students.
+const CHAT_SYSTEM_PROMPT = `You are Mate, an autonomous academic assistant for Filipino university students.
 
 You help students plan their semester by:
 - Understanding vague requests like "help me plan my week"
-- Asking clarifying questions when needed
+- Asking exactly ONE clarifying question when availability or priorities are missing
 - Being warm, supportive, and non-judgmental
-- Using Taglish when appropriate
+- Using Taglish when appropriate ("Sige, let's sort this out")
 
-If the user's request is ambiguous or missing information, ask ONE clarifying question.
-If you have enough information, provide a helpful response.
+CRITICAL: Respond with ONLY valid JSON — no markdown, no extra text.
 
-Keep responses concise and actionable.`;
+JSON schema:
+{
+  "intent": "clarify" | "schedule" | "conflicts" | "general",
+  "reply": "user-facing message in plain language",
+  "availability": null OR {
+    "unavailable_times": [{ "day": "Monday", "start": "08:00", "end": "17:00" }],
+    "preferred_study_duration": 120
+  },
+  "ready_to_schedule": false
+}
+
+Rules:
+- intent "clarify": missing info for scheduling — ask ONE question in reply; ready_to_schedule=false; availability=null
+- intent "schedule": user gave enough availability — set ready_to_schedule=true and populate availability
+- intent "conflicts": user asks about collision weeks or overlapping deadlines
+- intent "general": other academic planning questions
+- Never invent deadlines not in context
+- If no assessments in context, tell user to upload a syllabus first
+- Default preferred_study_duration to 120 minutes when inferring availability`;
+
+function defaultChatAnalysis(reply: string, intent: ChatIntent = 'general'): ChatAnalysis {
+  return {
+    intent,
+    reply,
+    availability: null,
+    ready_to_schedule: false,
+  };
+}
+
+function parseChatAnalysis(content: string): ChatAnalysis {
+  try {
+    const cleaned = stripMarkdownCodeBlocks(content);
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : cleaned) as Partial<ChatAnalysis>;
+
+    if (!parsed.reply || typeof parsed.reply !== 'string') {
+      return defaultChatAnalysis(content.trim() || 'Can you tell me a bit more?');
+    }
+
+    const intent = (['clarify', 'schedule', 'conflicts', 'general'].includes(parsed.intent || '')
+      ? parsed.intent
+      : 'general') as ChatIntent;
+
+    return {
+      intent,
+      reply: parsed.reply,
+      availability: parsed.availability ?? null,
+      ready_to_schedule: Boolean(parsed.ready_to_schedule),
+    };
+  } catch {
+    return defaultChatAnalysis(
+      content.trim() || "I'm not sure how to help with that. Can you clarify?",
+      'general'
+    );
+  }
+}
+
+export async function processNaturalLanguage(
+  userMessage: string,
+  context: Record<string, unknown>,
+  history: ChatTurn[] = []
+): Promise<ChatAnalysis> {
+  const historyMessages: AIMessage[] = history.map((turn) => ({
+    role: turn.role,
+    content: turn.content,
+  }));
 
   const response = await callAIFoundry({
-    deployment: DEPLOYMENTS.GPT5,
+    deployment: DEPLOYMENTS.MISTRAL_LARGE,
     messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: `Context: ${JSON.stringify(context)}\n\nUser: ${userMessage}` },
+      { role: 'system', content: CHAT_SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: `Student context: ${JSON.stringify(context)}\n\nConversation so far is in the message history. Respond to the latest user message.`,
+      },
+      ...historyMessages,
+      { role: 'user', content: userMessage },
     ],
-    temperature: 0.7,
-    max_tokens: 500,
+    temperature: 0.5,
+    max_tokens: 700,
+    response_format: { type: 'json_object' },
   });
 
-  return response.choices[0]?.message?.content || 'I\'m not sure how to help with that. Can you clarify?';
+  const content = response.choices[0]?.message?.content;
+  if (!content) {
+    return defaultChatAnalysis(
+      "I'm having trouble right now. Can you try again in a moment?",
+      'general'
+    );
+  }
+
+  return parseChatAnalysis(content);
 }
 
 // ============================================
@@ -428,7 +578,7 @@ Keep responses concise and actionable.`;
 export async function testAIConnection(): Promise<boolean> {
   try {
     const response = await callAIFoundry({
-      deployment: DEPLOYMENTS.GPT5,
+      deployment: DEPLOYMENTS.MISTRAL_LARGE,
       messages: [
         { role: 'user', content: 'Respond with "OK" if you can read this.' },
       ],

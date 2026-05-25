@@ -1,7 +1,7 @@
 # Mate - Autonomous Academic Orchestrator
 
 **KPMG Academic Innovation Challenge 2026**  
-**Milestone:** M0 - SaaS Scaffolding ✅ COMPLETE  
+**Milestone:** M1 — Reasoning + approval E2E (in progress)  
 **Demo Submission:** 2026-05-25
 
 ---
@@ -30,9 +30,9 @@ Mate is an autonomous academic assistant that transforms static syllabi into an 
 1. **Extracts** every assessment deadline using AI
 2. **Flags** ambiguous dates for review
 3. **Detects** deadline conflicts across courses
-4. **Suggests** realistic study schedules
+4. **Suggests** realistic study schedules via chat or the schedule form
 
-**M0 Demo:** Upload → Extract → Review → Approve flow
+**Demo flow:** Sign in → Upload → Extract → Review → Approve → Dashboard (Ask Mate / Conflicts / Schedule)
 
 ---
 
@@ -49,7 +49,11 @@ app/
 │   │   ├── page.tsx           # Landing page
 │   │   └── layout.tsx         # Root layout
 │   ├── components/            # React components
-│   │   └── ExtractionReview.tsx
+│   │   ├── ExtractionReview.tsx
+│   │   ├── MateChat.tsx       # Lateral-language chat (DSD §4)
+│   │   ├── ConflictReport.tsx
+│   │   ├── SchedulePlanner.tsx
+│   │   └── NavBar.tsx
 │   ├── lib/                   # Core logic
 │   │   ├── cosmos.ts          # Cosmos DB client
 │   │   ├── ai-foundry.ts      # AI Foundry client
@@ -69,7 +73,7 @@ app/
 
 | File | Purpose |
 |------|---------|
-| **M0-COMPLETE.md** | Implementation summary and next steps |
+| **src/components/MateChat.tsx** | Conversation UI for lateral language (Ask Mate tab) |
 | **QUICK-START.md** | Step-by-step testing guide |
 | **IMPLEMENTATION-STATUS.md** | Detailed status, metrics, known issues |
 | **BUILD-PLAN.md** | Original M0 build plan |
@@ -84,7 +88,7 @@ app/
 - **Database:** Azure Cosmos DB (NoSQL)
 - **AI:** Azure AI Foundry (GPT-5, Mistral-Large-3, Mistral Document AI)
 - **Hosting:** Azure App Service (planned)
-- **Auth:** Microsoft 365 / Google (planned)
+- **Auth:** NextAuth (Microsoft Entra ID)
 
 ---
 
@@ -119,6 +123,14 @@ CONFIDENCE_THRESHOLD=0.75
 | GET | `/api/proposals/[id]` | Get extraction result |
 | PATCH | `/api/proposals/[id]` | Update proposal (edit assessments) |
 | POST | `/api/proposals/[id]/approve` | Approve and save to Cosmos DB |
+| GET | `/api/courses` | List courses with approved deadlines (grouped by syllabus) |
+| DELETE | `/api/courses/[id]` | Remove a syllabus and all its deadlines |
+| PATCH | `/api/assessments/[id]` | Edit a single approved deadline |
+| DELETE | `/api/assessments/[id]` | Remove a single deadline |
+| GET | `/api/conflicts` | Detect deadline conflicts across approved assessments |
+| POST | `/api/schedule` | Generate study blocks from availability input |
+| GET | `/api/calendar/events` | Fetch Outlook calendar events (Microsoft Graph) |
+| POST | `/api/calendar/availability` | Free/busy lookup via Microsoft Graph |
 
 ---
 
@@ -149,13 +161,15 @@ npm run lint
 ## Testing the Demo
 
 1. **Start server:** `npm run dev`
-2. **Upload syllabus:** Go to http://localhost:3000
-3. **Wait for extraction:** ~10 seconds
-4. **Review assessments:** Edit flagged items
-5. **Approve all:** Saves to Cosmos DB
-6. **Verify:** Check Cosmos DB Data Explorer
+2. **Sign in** with Microsoft at http://localhost:3000
+3. **Upload syllabus** from the upload page
+4. **Wait for extraction:** ~10 seconds
+5. **Review assessments:** Edit flagged items, then **Approve All**
+6. **Open dashboard** → **Deadlines** tab to view, edit, or remove by syllabus
+7. Try **Ask Mate** → *"Help me plan my week"*
+8. Check **Conflicts** and **Study Schedule** tabs
 
-See **[QUICK-START.md](./QUICK-START.md)** for detailed steps.
+Design tokens and chat UI spec: [`docs/dsd-mate.md`](../docs/dsd-mate.md) §4 (Chat panel).
 
 ---
 
@@ -163,36 +177,37 @@ See **[QUICK-START.md](./QUICK-START.md)** for detailed steps.
 
 - ✅ PDF syllabus upload
 - ✅ AI extraction (Mistral Document AI)
-- ✅ Confidence scoring
+- ✅ Confidence scoring + View Metrics toggle
 - ✅ Review panel with inline editing
 - ✅ Batch approval to Cosmos DB
-- ✅ Conflict detection (backend only)
-- ✅ Error handling
-- ✅ Loading states
+- ✅ Latency masking on upload
+- ✅ Microsoft Entra ID authentication
 
 ---
 
-## M1 Features (Planned)
+## M1 Features
 
-- [ ] Conflict detection UI
-- [ ] Schedule generation UI
-- [ ] Dashboard (all courses)
-- [ ] Authentication (M365/Google)
-- [ ] Calendar integration
-- [ ] Mobile polish
+- ✅ Conflict detection UI (dashboard Conflicts tab)
+- ✅ Schedule generation UI (dashboard Study Schedule tab)
+- ✅ **Lateral-language chat** (`MateChat` — dashboard Ask Mate tab)
+- ✅ Dashboard with tabbed navigation
+- ✅ **Deadlines tab** — view/edit/remove deadlines grouped by syllabus (`DeadlineManager`)
+- [ ] Re-upload dedupe (same filename warning)
+- [ ] Manual entry fallback when extraction fails
+- [ ] Outlook calendar wired into schedule planner (Graph APIs exist)
 - [ ] DOC/DOCX support
+- [ ] Mobile polish (375px pass)
+- [ ] Extraction accuracy harness (`qa/` corpus)
 
 ---
 
 ## Known Issues
 
-1. No authentication (using `demo-user`)
-2. DOC/DOCX not supported (PDF only)
-3. No retry logic for failed extractions
-4. Conflicts detected but not displayed
-5. No dashboard yet
-
-See **[IMPLEMENTATION-STATUS.md](./IMPLEMENTATION-STATUS.md)** for full list.
+1. Scanned/image PDFs fail without Azure Vision OCR fallback
+2. DOC/DOCX accepted on upload but not reliably processed
+3. No manual entry flow when extraction fails
+4. Chat schedule generation depends on AI parsing availability from natural language
+5. Consolidated cross-course deadline list not yet on dashboard
 
 ---
 
@@ -223,14 +238,14 @@ See **[QUICK-START.md](./QUICK-START.md)** for more troubleshooting.
 
 For KPMG submission (2026-05-25):
 
-- [ ] Show landing page
+- [ ] Show landing page and sign-in
 - [ ] Upload real syllabus PDF
-- [ ] Show loading state
-- [ ] Show extracted assessments
-- [ ] Edit a flagged date
+- [ ] Show loading / latency mask
+- [ ] Show extracted assessments + edit a flagged date
 - [ ] Click "Approve All"
-- [ ] Show success message
-- [ ] (Optional) Show Cosmos DB data
+- [ ] Open **Ask Mate** → say "Help me plan my week"
+- [ ] Show clarifying question + study blocks
+- [ ] Show conflict detection tab (if overlapping syllabi)
 
 **Length:** 2-3 minutes  
 **Format:** MP4 or MOV  
