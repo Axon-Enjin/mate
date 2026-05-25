@@ -7,8 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "test:connections": "node test-connections.js"
+    "lint": "next lint"
   },
   "keywords": [
     "academic",
