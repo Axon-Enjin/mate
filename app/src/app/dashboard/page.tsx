@@ -86,9 +86,13 @@ export default function DashboardPage() {
       }
 
       const data = await response.json();
+      
+      // Return the complete schedule data including assessments
       return {
         study_blocks: data.data?.study_blocks || [],
         message: data.data?.message || "Schedule generated!",
+        assessments: data.data?.assessments || [],
+        availability_source: data.data?.availability_source,
       };
     } catch (error) {
       console.error("Generate schedule error:", error);

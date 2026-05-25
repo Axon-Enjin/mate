@@ -116,23 +116,39 @@ export default function SchedulePlanner({
 
   // Get assessment details for a study block
   const getAssessmentForBlock = (block: StudyBlock) => {
-    return schedule?.assessments?.find((a) => a.id === block.assessment_id);
+    if (!block.assessment_id) return null;
+    return schedule?.assessments?.find((a) => a.id === block.assessment_id) || null;
   };
 
   // Get smart description for study block
   const getBlockDescription = (block: StudyBlock) => {
-    // If the block already has a description from the API, use it
-    if (block.description && block.description !== "Study session" && block.description !== "Study block") {
-      return block.description;
-    }
-    
-    // Otherwise, look up the assessment
+    // First, try to get the assessment title directly
     const assessment = getAssessmentForBlock(block);
+    
+    // Debug logging
+    console.log('[getBlockDescription]', {
+      block_id: block.id,
+      assessment_id: block.assessment_id,
+      assessment_found: !!assessment,
+      assessment_title: assessment?.title,
+      block_description: block.description,
+      total_assessments: schedule?.assessments?.length,
+    });
+    
     if (assessment) {
-      return `Study: ${assessment.title}`;
+      return assessment.title;
     }
     
-    return block.description || "Study session";
+    // Fall back to the block's description if available
+    if (block.description && 
+        block.description !== "Study session" && 
+        block.description !== "Study block" &&
+        block.description !== "Study Session") {
+      // Remove "Study: " prefix if present
+      return block.description.replace(/^Study:\s*/i, "");
+    }
+    
+    return "Study session";
   };
 
   const eventsByDate = pendingEvents.reduce<Record<string, typeof pendingEvents>>(
@@ -288,6 +304,15 @@ export default function SchedulePlanner({
       }
 
       const result = await onGenerateSchedule(body);
+      
+      // Debug logging
+      console.log('[SchedulePlanner] Schedule result:', {
+        study_blocks_count: result.study_blocks?.length,
+        assessments_count: result.assessments?.length,
+        sample_block: result.study_blocks?.[0],
+        sample_assessment: result.assessments?.[0],
+      });
+      
       setSchedule(result);
       setApprovedBlockIds(new Set());
       setShowScheduleModal(true); // Show modal with results
@@ -379,29 +404,59 @@ export default function SchedulePlanner({
     setError(null);
 
     try {
-      const response = await fetch("/api/teams/reminder", {
+      const block = schedule?.study_blocks.find((b) => b.id === blockId);
+      if (!block) {
+        throw new Error("Study block not found");
+      }
+
+      const assessment = getAssessmentForBlock(block);
+      
+      // Log for debugging
+      console.log("Sending reminder for block:", {
+        blockId,
+        assessment_id: block.assessment_id,
+        assessment_found: !!assessment,
+        assessment_title: assessment?.title,
+        total_assessments: schedule?.assessments?.length,
+      });
+
+      const response = await fetch("/api/webhooks/study-block", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ study_block_id: blockId }),
+        body: JSON.stringify({
+          action: "study_block_reminder",
+          study_block: block,
+          assessment,
+        }),
       });
 
       const data = await response.json();
       
       // Log the full response for debugging
-      console.log("Teams reminder response:", { status: response.status, data });
+      console.log("Webhook reminder response:", { status: response.status, data });
 
       if (!response.ok) {
-        const errorMsg = data.error || data.message || `Failed to send Teams reminder (${response.status})`;
-        console.error("Teams reminder failed:", errorMsg, data);
+        // Check if webhook is not configured
+        if (data.data?.skipped) {
+          throw new Error(
+            "Power Automate webhook not configured. Please add POWER_AUTOMATE_WEBHOOK_URL to your .env file. See docs/power-automate-quick-start.md for setup instructions."
+          );
+        }
+        const errorMsg = data.error || data.message || `Failed to send reminder (${response.status})`;
+        console.error("Webhook reminder failed:", errorMsg, data);
         throw new Error(errorMsg);
       }
 
       // Show brief success feedback
-      setSyncSuccess(data.data?.message || "Reminder sent to Microsoft Teams!");
+      setSyncSuccess(
+        data.data?.skipped
+          ? "Webhook not configured. Check console for setup instructions."
+          : "Reminder sent via Power Automate! Check Teams/Email."
+      );
       setTimeout(() => setSyncSuccess(null), 5000);
     } catch (err) {
-      console.error("Teams reminder error:", err);
-      const errorMessage = err instanceof Error ? err.message : "Failed to send Teams reminder";
+      console.error("Reminder error:", err);
+      const errorMessage = err instanceof Error ? err.message : "Failed to send reminder";
       setError(errorMessage);
       
       // Auto-clear error after 10 seconds
@@ -541,17 +596,13 @@ export default function SchedulePlanner({
                       minute: "2-digit",
                       hour12: true,
                     });
-                    const smartTitle = getBlockDescription(block);
-                    // Extract just the assessment name without "Study: " prefix for compact display
-                    const compactTitle = smartTitle.startsWith("Study: ") 
-                      ? smartTitle.substring(7) 
-                      : smartTitle;
+                    const assessmentTitle = getBlockDescription(block);
                     
                     return (
                       <div
                         key={`study-${idx}`}
                         className="group relative rounded border-l-2 border-success bg-success/10 px-1.5 py-1 hover:bg-success/20 transition-colors"
-                        title={`${smartTitle} at ${startTime}`}
+                        title={`${assessmentTitle} at ${startTime}`}
                       >
                         <div className="flex items-center gap-1">
                           <svg className="w-3 h-3 text-success flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -562,7 +613,7 @@ export default function SchedulePlanner({
                           </span>
                         </div>
                         <p className="text-[10px] font-medium text-success/90 truncate mt-0.5">
-                          {compactTitle}
+                          {assessmentTitle}
                         </p>
                       </div>
                     );
@@ -1138,7 +1189,7 @@ export default function SchedulePlanner({
                       <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      Approve blocks, then click "Add to Outlook" to sync
+                      Approve blocks, then click "Remind" to send via Power Automate
                     </p>
                   )}
                 </div>
@@ -1273,14 +1324,26 @@ export default function SchedulePlanner({
                               {status === "authenticated" && isApproved && (
                                 <button
                                   onClick={() => sendTeamsReminder(block.id!)}
-                                  disabled={true}
-                                  className="inline-flex items-center gap-1 text-xs font-semibold text-text-muted border border-border rounded-full px-2.5 py-1 cursor-not-allowed opacity-50"
-                                  title="Teams reminders coming soon! Use Outlook Calendar sync for now."
+                                  disabled={sendingTeamsReminder.has(block.id!)}
+                                  className="inline-flex items-center gap-1 text-xs font-semibold text-primary border border-primary/40 rounded-full px-2.5 py-1 hover:bg-primary/5 transition-colors disabled:opacity-50"
+                                  title="Send reminder via Power Automate"
                                 >
-                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                                  </svg>
-                                  Teams (Soon)
+                                  {sendingTeamsReminder.has(block.id!) ? (
+                                    <>
+                                      <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                      </svg>
+                                      Sending...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                      </svg>
+                                      Remind
+                                    </>
+                                  )}
                                 </button>
                               )}
                             </>
