@@ -101,7 +101,7 @@ async function callAIFoundry(request: CompletionRequest): Promise<CompletionResp
   
   console.log('[AI Foundry] Full request body:', JSON.stringify({
     ...requestBody,
-    messages: `[${requestBody.messages.length} messages]` // Don't log full messages
+    messages: `[${request.messages.length} messages]` // Don't log full messages
   }, null, 2));
   
   try {
