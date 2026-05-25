@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { formatDateTime } from "@/lib/utils";
 import type {
   Assessment,
@@ -26,6 +28,29 @@ const QUICK_PROMPTS = [
   "Help me plan my week",
   "Any deadline conflicts?",
   "What's due soon?",
+];
+
+const UNSAFE_PROMPT_PATTERNS = [
+  /\bself-harm\b/i,
+  /\bsuicide\b/i,
+  /\bkill myself\b/i,
+  /\bhow to die\b/i,
+  /\bexplosive(s)?\b/i,
+  /\bbomb\b/i,
+  /\bweapon(s)?\b/i,
+  /\bhack(ing)?\b/i,
+  /\bmalware\b/i,
+  /\bphishing\b/i,
+];
+
+const JSON_LEAK_KEYS = [
+  "ready_to_schedule",
+  "availability",
+  "intent",
+  "assessment_count",
+  "course_count",
+  "study_blocks",
+  "conflicts",
 ];
 
 function chatStorageKey(userId: string) {
@@ -59,6 +84,30 @@ function saveChatHistory(userId: string, messages: ChatMessage[]) {
   } catch {
     // Ignore storage quota / private mode errors
   }
+}
+
+function isUnsafePrompt(text: string) {
+  return UNSAFE_PROMPT_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function sanitizeAssistantMessage(content: string) {
+  const trimmed = content.trim();
+  if (!trimmed) return content;
+
+  const looksJson = trimmed.startsWith("{") && trimmed.endsWith("}");
+  const keyHit = JSON_LEAK_KEYS.some(
+    (key) => trimmed.includes(`"${key}"`) || trimmed.includes(`${key}:`)
+  );
+
+  if (looksJson && keyHit) {
+    return "I can help with scheduling and conflicts. Tell me your availability (for example: Mon 2-5pm) or ask what is due soon.";
+  }
+
+  if (keyHit && /\bready_to_schedule\b|\bavailability\b/i.test(trimmed)) {
+    return "I can help with scheduling. Share your available times and I will build a study plan.";
+  }
+
+  return content;
 }
 
 export default function MateChat({ assessments }: MateChatProps) {
@@ -105,6 +154,11 @@ export default function MateChat({ assessments }: MateChatProps) {
     const trimmed = text.trim();
     if (!trimmed || isSending) return;
 
+    if (isUnsafePrompt(trimmed)) {
+      setError("Sorry, I can't help with that request. Ask me about deadlines, conflicts, or study plans.");
+      return;
+    }
+
     setError(null);
     setIsSending(true);
     setInput("");
@@ -135,11 +189,12 @@ export default function MateChat({ assessments }: MateChatProps) {
 
       const data = await response.json();
       const payload = data.data;
+      const safeMessage = sanitizeAssistantMessage(String(payload.message || ""));
 
       const assistantMessage: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: payload.message,
+        content: safeMessage,
         study_blocks: payload.study_blocks,
         conflicts: payload.conflicts,
       };
@@ -167,12 +222,12 @@ export default function MateChat({ assessments }: MateChatProps) {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-[720px] flex-col">
-      {/* Conversation panel — DSD §4: one panel per logical step */}
-      <div className="flex min-h-[480px] flex-col overflow-hidden rounded-lg border border-border bg-surface shadow-sm">
+    <div className="flex h-full w-full flex-col">
+      {/* Conversation panel */}
+      <div className="flex h-full flex-col overflow-hidden bg-surface">
         {/* Messages */}
         <div
-          className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-6"
+          className="flex-1 space-y-4 overflow-y-auto overflow-x-hidden p-4 sm:p-6"
           aria-live="polite"
           aria-label="Conversation with Mate"
         >
@@ -198,7 +253,50 @@ export default function MateChat({ assessments }: MateChatProps) {
                       Mate
                     </p>
                   )}
-                  <p className="whitespace-pre-wrap">{message.content}</p>
+                  {message.role === "assistant" ? (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        p: ({ children }) => (
+                          <p className="whitespace-pre-wrap break-words text-text">{children}</p>
+                        ),
+                        ul: ({ children }) => (
+                          <ul className="list-disc space-y-1 pl-5 text-text">{children}</ul>
+                        ),
+                        ol: ({ children }) => (
+                          <ol className="list-decimal space-y-1 pl-5 text-text">{children}</ol>
+                        ),
+                        li: ({ children }) => <li className="break-words text-text">{children}</li>,
+                        a: ({ children, href }) => (
+                          <a
+                            href={href}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="break-all text-primary underline underline-offset-2"
+                          >
+                            {children}
+                          </a>
+                        ),
+                        strong: ({ children }) => (
+                          <strong className="font-semibold text-text">{children}</strong>
+                        ),
+                        code: ({ children }) => (
+                          <code className="whitespace-pre-wrap break-words rounded bg-surface-emphasis px-1 py-0.5 font-mono text-xs text-text">
+                            {children}
+                          </code>
+                        ),
+                        pre: ({ children }) => (
+                          <pre className="max-w-full overflow-x-hidden whitespace-pre-wrap break-words rounded bg-surface-emphasis p-2 text-sm text-text">
+                            {children}
+                          </pre>
+                        ),
+                      }}
+                    >
+                      {sanitizeAssistantMessage(message.content)}
+                    </ReactMarkdown>
+                  ) : (
+                    <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                  )}
                 </div>
 
                 {/* Inline conflict callout — DSD §4 */}

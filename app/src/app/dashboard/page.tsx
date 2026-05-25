@@ -22,6 +22,7 @@ type DashboardTab = "chat" | "deadlines" | "conflicts" | "schedule";
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<DashboardTab>("deadlines");
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const [courses, setCourses] = useState<CourseWithAssessments[]>([]);
   const [conflicts, setConflicts] = useState<ConflictWindow[]>([]);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
@@ -86,7 +87,21 @@ export default function DashboardPage() {
     };
   };
 
-  const tabs: { id: DashboardTab; label: string; icon: React.ReactNode; badge?: number }[] = [
+  const toggleChat = () => {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      setIsChatOpen(true);
+      return;
+    }
+    setIsChatOpen((prev) => !prev);
+  };
+
+  const tabs: {
+    id: DashboardTab;
+    label: string;
+    icon: React.ReactNode;
+    badge?: number;
+    desktopHidden?: boolean;
+  }[] = [
     {
       id: "deadlines",
       label: "Deadlines",
@@ -115,6 +130,7 @@ export default function DashboardPage() {
           />
         </svg>
       ),
+      desktopHidden: true,
     },
     {
       id: "conflicts",
@@ -174,77 +190,146 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex flex-col flex-1 bg-bg">
+    <div className={`flex min-h-[100dvh] flex-col bg-bg ${isChatOpen ? "lg:pr-[480px]" : ""}`}>
       <NavBar />
 
       <div className="flex-1 p-4 sm:p-6 lg:p-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-2xl font-semibold text-text mb-2 sm:text-3xl">
-              Your Academic Dashboard
-            </h1>
-            <p className="text-base text-text-muted sm:text-lg">
-              Manage deadlines by syllabus, ask Mate for help, or plan your week.
-            </p>
-            <p className="mt-2 text-sm text-text-muted">
-              {courses.length} syllabus{courses.length !== 1 ? "es" : ""} ·{" "}
-              {allAssessments.length} approved deadline
-              {allAssessments.length !== 1 ? "s" : ""}
-            </p>
-          </div>
-
-          <div className="mb-6">
-            <div className="border-b border-border">
-              <nav className="flex gap-4 overflow-x-auto sm:gap-6" aria-label="Dashboard sections">
-                {tabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`
-                      shrink-0 pb-3 px-1 text-sm font-medium border-b-2 transition-colors duration-150
-                      ${
-                        activeTab === tab.id
-                          ? "border-primary text-primary"
-                          : "border-transparent text-text-muted hover:text-text hover:border-border"
-                      }
-                    `}
-                  >
-                    <div className="flex items-center gap-2">
-                      {tab.icon}
-                      {tab.label}
-                      {tab.badge !== undefined && tab.badge > 0 && (
-                        <span
-                          className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-xs font-bold rounded-full ${
-                            tab.id === "conflicts"
-                              ? "bg-warning text-white"
-                              : "bg-primary/15 text-primary"
-                          }`}
-                        >
-                          {tab.badge}
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </nav>
+        <div className="mx-auto w-full max-w-6xl">
+          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold text-text mb-2 sm:text-3xl">
+                Your Academic Dashboard
+              </h1>
+              <p className="text-base text-text-muted sm:text-lg">
+                Manage deadlines by syllabus, ask Mate for help, or plan your week.
+              </p>
+              <p className="mt-2 text-sm text-text-muted">
+                {courses.length} syllabus{courses.length !== 1 ? "es" : ""} ·{" "}
+                {allAssessments.length} approved deadline
+                {allAssessments.length !== 1 ? "s" : ""}
+              </p>
             </div>
+            <button
+              type="button"
+              onClick={toggleChat}
+              className="inline-flex items-center gap-2 rounded-lg border border-primary px-3 py-2 text-sm font-medium text-primary transition-all duration-150 hover:bg-surface-emphasis"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                />
+              </svg>
+              {isChatOpen ? "Close Mate" : "Ask Mate"}
+            </button>
           </div>
 
-          {activeTab === "deadlines" && (
-            <DeadlineManager courses={courses} onRefresh={loadDashboardData} />
-          )}
+          <div className="grid gap-6">
+            <div>
+              <div className="mb-6">
+                <div className="border-b border-border">
+                  <nav
+                    className="flex gap-4 overflow-x-auto sm:gap-6"
+                    aria-label="Dashboard sections"
+                  >
+                    {tabs.map((tab) => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`
+                          shrink-0 pb-3 px-1 text-sm font-medium border-b-2 transition-colors duration-150
+                          ${tab.desktopHidden ? "lg:hidden" : ""}
+                          ${
+                            activeTab === tab.id
+                              ? "border-primary text-primary"
+                              : "border-transparent text-text-muted hover:text-text hover:border-border"
+                          }
+                        `}
+                      >
+                        <div className="flex items-center gap-2">
+                          {tab.icon}
+                          {tab.label}
+                          {tab.badge !== undefined && tab.badge > 0 && (
+                            <span
+                              className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-xs font-bold rounded-full ${
+                                tab.id === "conflicts"
+                                  ? "bg-warning text-white"
+                                  : "bg-primary/15 text-primary"
+                              }`}
+                            >
+                              {tab.badge}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </nav>
+                </div>
+              </div>
 
-          {activeTab === "chat" && <MateChat assessments={allAssessments} />}
+              {activeTab === "deadlines" && (
+                <DeadlineManager courses={courses} onRefresh={loadDashboardData} />
+              )}
 
-          {activeTab === "conflicts" && (
-            <ConflictReport conflicts={conflicts} assessments={assessments} />
-          )}
+              {activeTab === "chat" && !isChatOpen && (
+                <div className="flex h-[calc(100vh-250px)] min-h-[500px] flex-col overflow-hidden rounded-xl border border-border shadow-sm">
+                  <MateChat assessments={allAssessments} />
+                </div>
+              )}
 
-          {activeTab === "schedule" && (
-            <SchedulePlanner onGenerateSchedule={handleGenerateSchedule} />
-          )}
+              {activeTab === "conflicts" && (
+                <ConflictReport conflicts={conflicts} assessments={assessments} />
+              )}
+
+              {activeTab === "schedule" && (
+                <SchedulePlanner onGenerateSchedule={handleGenerateSchedule} />
+              )}
+            </div>
+
+            {isChatOpen && (
+              <aside className="fixed bottom-0 right-0 top-0 z-40 hidden w-[480px] flex-col border-l border-border bg-surface shadow-xl lg:flex">
+                <div className="flex h-16 shrink-0 items-center justify-between border-b border-border px-5">
+                  <h2 className="font-semibold text-text">Mate</h2>
+                  <button
+                    type="button"
+                    onClick={() => setIsChatOpen(false)}
+                    className="rounded-md p-1.5 text-text-muted hover:bg-surface-emphasis hover:text-text"
+                  >
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <MateChat assessments={allAssessments} />
+                </div>
+              </aside>
+            )}
+          </div>
         </div>
       </div>
+
+      {isChatOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 lg:hidden">
+          <div className="flex h-[85vh] w-full flex-col overflow-hidden rounded-t-2xl bg-surface shadow-xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-border bg-surface px-4 py-3">
+              <p className="text-sm font-semibold text-text">Mate</p>
+              <button
+                type="button"
+                onClick={() => setIsChatOpen(false)}
+                className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-text-muted hover:bg-surface-emphasis"
+              >
+                Close
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden bg-surface">
+              <MateChat assessments={allAssessments} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
