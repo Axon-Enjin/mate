@@ -48,6 +48,7 @@ interface SchedulePlannerProps {
     study_blocks: StudyBlock[];
     message: string;
     availability_source?: string;
+    assessments?: Assessment[];
   }>;
 }
 
