@@ -19,12 +19,23 @@ export interface CalendarEvent {
   };
   isAllDay: boolean;
   isCancelled: boolean;
+  calendar_id?: string;
+  calendar_name?: string;
   organizer?: {
     emailAddress: {
       name: string;
       address: string;
     };
   };
+}
+
+export interface CalendarInfo {
+  id: string;
+  name: string;
+  isDefaultCalendar?: boolean;
+  canEdit?: boolean;
+  canShare?: boolean;
+  canViewPrivateItems?: boolean;
 }
 
 export interface CreateEventInput {
@@ -34,6 +45,60 @@ export interface CreateEventInput {
   location?: string;
   body?: string;
   isAllDay?: boolean;
+}
+
+/**
+ * List all calendars the user can access
+ */
+export async function getCalendars(accessToken: string): Promise<CalendarInfo[]> {
+  const response = await fetch(
+    "https://graph.microsoft.com/v1.0/me/calendars?$select=id,name,isDefaultCalendar,canEdit,canShare,canViewPrivateItems",
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to fetch calendars: ${response.status} ${error}`);
+  }
+
+  const data = await response.json();
+  return data.value as CalendarInfo[];
+}
+
+/**
+ * Fetch calendar events for a specific calendar
+ */
+export async function getCalendarView(
+  accessToken: string,
+  calendarId: string,
+  startDate: Date,
+  endDate: Date
+): Promise<CalendarEvent[]> {
+  const startDateTime = startDate.toISOString();
+  const endDateTime = endDate.toISOString();
+
+  const response = await fetch(
+    `https://graph.microsoft.com/v1.0/me/calendars/${calendarId}/calendarView?startDateTime=${startDateTime}&endDateTime=${endDateTime}&$select=id,subject,start,end,location,isAllDay,isCancelled,organizer&$orderby=start/dateTime`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to fetch calendar view: ${response.status} ${error}`);
+  }
+
+  const data = await response.json();
+  return data.value as CalendarEvent[];
 }
 
 /**
@@ -64,6 +129,29 @@ export async function getCalendarEvents(
 
   const data = await response.json();
   return data.value as CalendarEvent[];
+}
+
+/**
+ * Fetch events from all calendars and annotate with calendar metadata
+ */
+export async function getAllCalendarEvents(
+  accessToken: string,
+  startDate: Date,
+  endDate: Date
+): Promise<CalendarEvent[]> {
+  const calendars = await getCalendars(accessToken);
+  const results = await Promise.all(
+    calendars.map(async (calendar) => {
+      const events = await getCalendarView(accessToken, calendar.id, startDate, endDate);
+      return events.map((event) => ({
+        ...event,
+        calendar_id: calendar.id,
+        calendar_name: calendar.name,
+      }));
+    })
+  );
+
+  return results.flat();
 }
 
 /**
@@ -155,6 +243,63 @@ export async function getFreeBusySchedule(
   }
 
   return await response.json();
+}
+
+/**
+ * Convert calendar events into merged busy blocks
+ */
+export function mergeBusyBlocks(events: CalendarEvent[]): import("@/types").BusyBlock[] {
+  const blocks = events
+    .filter((event) => !event.isCancelled)
+    .map((event) => ({
+      start_at: event.start.dateTime,
+      end_at: event.end.dateTime,
+      source: "outlook" as const,
+      is_all_day: event.isAllDay,
+      calendar_id: event.calendar_id,
+      calendar_name: event.calendar_name,
+    }))
+    .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
+
+  if (blocks.length === 0) {
+    return [];
+  }
+
+  const merged: typeof blocks = [];
+  let current = { ...blocks[0] };
+
+  for (let i = 1; i < blocks.length; i += 1) {
+    const next = blocks[i];
+    const currentEnd = new Date(current.end_at).getTime();
+    const nextStart = new Date(next.start_at).getTime();
+    const nextEnd = new Date(next.end_at).getTime();
+
+    if (nextStart <= currentEnd) {
+      if (nextEnd > currentEnd) {
+        current.end_at = next.end_at;
+      }
+      current.is_all_day = current.is_all_day || next.is_all_day;
+      continue;
+    }
+
+    merged.push(current);
+    current = { ...next };
+  }
+
+  merged.push(current);
+  return merged;
+}
+
+/**
+ * Fetch merged busy blocks from all calendars
+ */
+export async function getOutlookBusyBlocks(
+  accessToken: string,
+  startDate: Date,
+  endDate: Date
+): Promise<import("@/types").BusyBlock[]> {
+  const events = await getAllCalendarEvents(accessToken, startDate, endDate);
+  return mergeBusyBlocks(events);
 }
 
 /**

@@ -47,6 +47,17 @@ export interface StudyBlock {
   created_at?: string;
 }
 
+export type AvailabilitySource = 'manual' | 'outlook' | 'combined';
+
+export interface BusyBlock {
+  start_at: string; // ISO-8601
+  end_at: string; // ISO-8601
+  source: 'outlook' | 'manual' | 'lms';
+  is_all_day?: boolean;
+  calendar_id?: string;
+  calendar_name?: string;
+}
+
 export interface IntegrationLink {
   id: string;
   user_id: string;
@@ -176,13 +187,14 @@ export interface ConflictReport {
 // ============================================
 
 export interface AvailabilityInput {
-  unavailable_times: {
+  unavailable_times?: {
     day: string; // ISO date or day of week
     start: string; // HH:mm
     end: string; // HH:mm
   }[];
   preferred_study_duration: number; // minutes
   priorities?: string[]; // assessment IDs in priority order
+  availability_source?: AvailabilitySource;
 }
 
 export interface ScheduleRequest {
@@ -194,6 +206,15 @@ export interface ScheduleRequest {
 export interface ScheduleResponse {
   study_blocks: StudyBlock[];
   message: string;
+}
+
+export interface ReminderActionPayload {
+  action: 'snooze' | 'reschedule';
+  study_block_id: string;
+  user_id: string;
+  snooze_minutes?: number;
+  new_start_at?: string;
+  new_end_at?: string;
 }
 
 // ============================================
