@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { formatDateTime } from "@/lib/utils";
 import type {
   Assessment,
@@ -23,13 +25,51 @@ interface MateChatProps {
 }
 
 const QUICK_PROMPTS = [
-  "Help me plan my week",
+  "What's my schedule this week?",
   "Any deadline conflicts?",
   "What's due soon?",
+  "Help me plan my week",
+];
+
+const UNSAFE_PROMPT_PATTERNS = [
+  /\bself-harm\b/i,
+  /\bsuicide\b/i,
+  /\bkill myself\b/i,
+  /\bhow to die\b/i,
+  /\bexplosive(s)?\b/i,
+  /\bbomb\b/i,
+  /\bweapon(s)?\b/i,
+  /\bhack(ing)?\b/i,
+  /\bmalware\b/i,
+  /\bphishing\b/i,
+];
+
+const PROMPT_INJECTION_PATTERNS = [
+  /\bignore (all|any|previous|prior) instructions\b/i,
+  /\b(system|developer) prompt\b/i,
+  /\bdeveloper message\b/i,
+  /\bjailbreak\b/i,
+  /\bprompt injection\b/i,
+  /\breveal (the )?(prompt|instructions)\b/i,
+  /\bbypass (the )?rules\b/i,
+];
+
+const JSON_LEAK_KEYS = [
+  "ready_to_schedule",
+  "availability",
+  "intent",
+  "assessment_count",
+  "course_count",
+  "study_blocks",
+  "conflicts",
 ];
 
 function chatStorageKey(userId: string) {
   return `mate-chat-${userId}`;
+}
+
+function assessmentStorageKey(userId: string) {
+  return `mate-chat-assessments-${userId}`;
 }
 
 function buildWelcomeMessage(hasAssessments: boolean): ChatMessage {
@@ -61,6 +101,107 @@ function saveChatHistory(userId: string, messages: ChatMessage[]) {
   }
 }
 
+function clearChatHistory(userId: string) {
+  try {
+    localStorage.removeItem(chatStorageKey(userId));
+  } catch {
+    // Ignore storage quota / private mode errors
+  }
+}
+
+function buildAssessmentSignature(assessments: Assessment[]) {
+  return assessments
+    .map((assessment) => `${assessment.id}:${assessment.due_at ?? ""}`)
+    .sort()
+    .join("|");
+}
+
+function isUnsafePrompt(text: string) {
+  return (
+    UNSAFE_PROMPT_PATTERNS.some((pattern) => pattern.test(text)) ||
+    PROMPT_INJECTION_PATTERNS.some((pattern) => pattern.test(text))
+  );
+}
+
+function buildGuardrailMessage(): ChatMessage {
+  return {
+    id: crypto.randomUUID(),
+    role: "assistant",
+    content:
+      "I can only help with deadlines, conflicts, and study plans. Ask about what's due, conflicts, or your weekly schedule.",
+  };
+}
+
+function extractReplyFromJsonLike(content: string): string | null {
+  const trimmed = content.trim();
+  if (!trimmed.startsWith("{") || !trimmed.includes("\"reply\"")) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as { reply?: string };
+    if (parsed.reply && typeof parsed.reply === "string") {
+      return parsed.reply;
+    }
+  } catch {
+    // Fall back to a tolerant string scan below.
+  }
+
+  const keyIndex = trimmed.indexOf("\"reply\"");
+  if (keyIndex === -1) return null;
+  const colonIndex = trimmed.indexOf(":", keyIndex);
+  if (colonIndex === -1) return null;
+
+  const firstQuote = trimmed.indexOf("\"", colonIndex + 1);
+  if (firstQuote === -1) return null;
+
+  let i = firstQuote + 1;
+  let result = "";
+  let escaping = false;
+
+  while (i < trimmed.length) {
+    const char = trimmed[i];
+    if (escaping) {
+      result += char;
+      escaping = false;
+    } else if (char === "\\") {
+      escaping = true;
+    } else if (char === "\"") {
+      return result;
+    } else {
+      result += char;
+    }
+    i += 1;
+  }
+
+  return null;
+}
+
+function sanitizeAssistantMessage(content: string) {
+  const trimmed = content.trim();
+  if (!trimmed) return content;
+
+  const extractedReply = extractReplyFromJsonLike(trimmed);
+  if (extractedReply) {
+    return extractedReply;
+  }
+
+  const looksJson = trimmed.startsWith("{") && trimmed.endsWith("}");
+  const keyHit = JSON_LEAK_KEYS.some(
+    (key) => trimmed.includes(`"${key}"`) || trimmed.includes(`${key}:`)
+  );
+
+  if (looksJson && keyHit) {
+    return "I can help with scheduling and conflicts. Tell me your availability (for example: Mon 2-5pm) or ask what is due soon.";
+  }
+
+  if (keyHit && /\bready_to_schedule\b|\bavailability\b/i.test(trimmed)) {
+    return "I can help with scheduling. Share your available times and I will build a study plan.";
+  }
+
+  return content;
+}
+
 export default function MateChat({ assessments }: MateChatProps) {
   const { data: session } = useSession();
   const userId = session?.user?.id;
@@ -88,6 +229,21 @@ export default function MateChat({ assessments }: MateChatProps) {
     setHydrated(true);
   }, [userId, assessments.length]);
 
+  useEffect(() => {
+    if (!userId) return;
+
+    const signature = buildAssessmentSignature(assessments);
+    const key = assessmentStorageKey(userId);
+    const lastSignature = localStorage.getItem(key);
+
+    if (lastSignature && lastSignature !== signature) {
+      clearChatHistory(userId);
+      setMessages([buildWelcomeMessage(assessments.length > 0)]);
+    }
+
+    localStorage.setItem(key, signature);
+  }, [userId, assessments]);
+
   // Persist chat after hydration
   useEffect(() => {
     if (!userId || !hydrated) return;
@@ -104,6 +260,15 @@ export default function MateChat({ assessments }: MateChatProps) {
   const sendMessage = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || isSending) return;
+
+    if (isUnsafePrompt(trimmed)) {
+      setError(
+        "Sorry, I can't help with that request. Ask me about deadlines, conflicts, or study plans."
+      );
+      setInput("");
+      setMessages((prev) => [...prev, buildGuardrailMessage()]);
+      return;
+    }
 
     setError(null);
     setIsSending(true);
@@ -135,11 +300,12 @@ export default function MateChat({ assessments }: MateChatProps) {
 
       const data = await response.json();
       const payload = data.data;
+      const safeMessage = sanitizeAssistantMessage(String(payload.message || ""));
 
       const assistantMessage: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: payload.message,
+        content: safeMessage,
         study_blocks: payload.study_blocks,
         conflicts: payload.conflicts,
       };
@@ -152,6 +318,14 @@ export default function MateChat({ assessments }: MateChatProps) {
       setIsSending(false);
       inputRef.current?.focus();
     }
+  };
+
+  const handleClearChat = () => {
+    if (!userId) return;
+    clearChatHistory(userId);
+    setMessages([buildWelcomeMessage(assessments.length > 0)]);
+    setError(null);
+    setInput("");
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -167,12 +341,12 @@ export default function MateChat({ assessments }: MateChatProps) {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-[720px] flex-col">
-      {/* Conversation panel — DSD §4: one panel per logical step */}
-      <div className="flex min-h-[480px] flex-col overflow-hidden rounded-lg border border-border bg-surface shadow-sm">
+    <div className="flex h-full w-full flex-col">
+      {/* Conversation panel */}
+      <div className="flex h-full flex-col overflow-hidden bg-surface">
         {/* Messages */}
         <div
-          className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-6"
+          className="flex-1 space-y-4 overflow-y-auto overflow-x-hidden p-4 sm:p-6"
           aria-live="polite"
           aria-label="Conversation with Mate"
         >
@@ -198,7 +372,50 @@ export default function MateChat({ assessments }: MateChatProps) {
                       Mate
                     </p>
                   )}
-                  <p className="whitespace-pre-wrap">{message.content}</p>
+                  {message.role === "assistant" ? (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        p: ({ children }) => (
+                          <p className="whitespace-pre-wrap break-words text-text">{children}</p>
+                        ),
+                        ul: ({ children }) => (
+                          <ul className="list-disc space-y-1 pl-5 text-text">{children}</ul>
+                        ),
+                        ol: ({ children }) => (
+                          <ol className="list-decimal space-y-1 pl-5 text-text">{children}</ol>
+                        ),
+                        li: ({ children }) => <li className="break-words text-text">{children}</li>,
+                        a: ({ children, href }) => (
+                          <a
+                            href={href}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="break-all text-primary underline underline-offset-2"
+                          >
+                            {children}
+                          </a>
+                        ),
+                        strong: ({ children }) => (
+                          <strong className="font-semibold text-text">{children}</strong>
+                        ),
+                        code: ({ children }) => (
+                          <code className="whitespace-pre-wrap break-words rounded bg-surface-emphasis px-1 py-0.5 font-mono text-xs text-text">
+                            {children}
+                          </code>
+                        ),
+                        pre: ({ children }) => (
+                          <pre className="max-w-full overflow-x-hidden whitespace-pre-wrap break-words rounded bg-surface-emphasis p-2 text-sm text-text">
+                            {children}
+                          </pre>
+                        ),
+                      }}
+                    >
+                      {sanitizeAssistantMessage(message.content)}
+                    </ReactMarkdown>
+                  ) : (
+                    <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                  )}
                 </div>
 
                 {/* Inline conflict callout — DSD §4 */}
@@ -285,9 +502,18 @@ export default function MateChat({ assessments }: MateChatProps) {
 
         {/* Quick prompts */}
         <div className="border-t border-border bg-surface px-4 py-3 sm:px-6">
-          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
-            Try asking
-          </p>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
+              Try asking
+            </p>
+            <button
+              type="button"
+              onClick={handleClearChat}
+              className="text-xs font-medium text-text-muted underline underline-offset-2 hover:text-text"
+            >
+              Clear chat (dev)
+            </button>
+          </div>
           <div className="flex flex-wrap gap-2">
             {QUICK_PROMPTS.map((prompt) => (
               <button
@@ -310,7 +536,7 @@ export default function MateChat({ assessments }: MateChatProps) {
         {/* Input */}
         <form
           onSubmit={handleSubmit}
-          className="border-t border-border bg-surface p-4 sm:p-6"
+          className="border-t border-border bg-surface p-3 sm:p-4"
         >
           {error && (
             <p className="mb-3 text-sm text-error" role="alert">
@@ -328,11 +554,11 @@ export default function MateChat({ assessments }: MateChatProps) {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder='e.g. "Help me plan my week"'
-              rows={2}
+              rows={1}
               disabled={isSending}
               className="
-                min-h-[48px] flex-1 resize-none rounded-lg border border-border
-                px-3 py-2 text-base text-text placeholder:text-text-muted
+                min-h-[40px] flex-1 resize-none rounded-lg border border-border
+                px-3 py-2 text-sm text-text placeholder:text-text-muted
                 transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-primary
                 disabled:opacity-60
               "
@@ -342,8 +568,8 @@ export default function MateChat({ assessments }: MateChatProps) {
               disabled={isSending || !input.trim()}
               aria-label="Send message to Mate"
               className="
-                inline-flex min-h-[48px] min-w-[48px] items-center justify-center
-                rounded-lg bg-primary px-4 py-2 font-medium text-white
+                inline-flex min-h-[40px] min-w-[40px] items-center justify-center
+                rounded-lg bg-primary px-3 py-2 font-medium text-white
                 transition-all duration-150 hover:bg-primary-hover
                 disabled:cursor-not-allowed disabled:opacity-40
               "

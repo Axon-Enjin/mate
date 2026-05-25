@@ -1,0 +1,38 @@
+{
+  "_meta": {
+    "source_file": "Latest_Multimedia_OBEorOBTLP-Format.pdf",
+    "course": "Multimedia Arts and Technology (IT / CCIS — PUP)",
+    "note": "Golden fixture — hand-curated. Dates should be within the academic year visible in the document."
+  },
+  "course": {
+    "name": "Multimedia Arts and Technology",
+    "term_label": null
+  },
+  "assessments": [
+    {
+      "title": "Quizzes",
+      "due_at": null,
+      "is_major": false
+    },
+    {
+      "title": "Laboratory / Activities",
+      "due_at": null,
+      "is_major": false
+    },
+    {
+      "title": "Midterm Exam",
+      "due_at": null,
+      "is_major": true
+    },
+    {
+      "title": "Final Exam",
+      "due_at": null,
+      "is_major": true
+    },
+    {
+      "title": "Project / Portfolio",
+      "due_at": null,
+      "is_major": true
+    }
+  ]
+}

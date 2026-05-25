@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserAssessments, getUserCourses } from "@/lib/cosmos";
+import { getUserAssessments, getUserCourses, getUserStudyBlocks } from "@/lib/cosmos";
 import { processNaturalLanguage, detectConflicts, generateSchedule } from "@/lib/ai-foundry";
 import { requireUserId } from "@/lib/auth-session";
 import { successResponse, errorResponse, logError } from "@/lib/utils";
@@ -26,14 +26,63 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const [courses, assessments] = await Promise.all([
+    const trimmedMessage = message.trim();
+    const isPromptInjection =
+      /\bignore (all|any|previous|prior) instructions\b/i.test(trimmedMessage) ||
+      /\b(system|developer) prompt\b/i.test(trimmedMessage) ||
+      /\bdeveloper message\b/i.test(trimmedMessage) ||
+      /\bjailbreak\b/i.test(trimmedMessage) ||
+      /\bprompt injection\b/i.test(trimmedMessage) ||
+      /\breveal (the )?(prompt|instructions)\b/i.test(trimmedMessage) ||
+      /\bbypass (the )?rules\b/i.test(trimmedMessage);
+
+    const isLikelyAcademic =
+      /\b(deadline|due|syllabus|schedule|exam|quiz|project|assignment|assessment|conflict|study|plan|week|semester|class|course)\b/i.test(
+        trimmedMessage
+      );
+
+    const isGreetingOrPolite =
+      /\b(hi|hello|hey|yo|greetings|good\s+morning|good\s+afternoon|good\s+evening|whats\s+up|what's\s+up|howdy|whats\s+good|what's\s+good|kamusta|kumusta|salamat|thanks|thank\s+you|who\s+are\s+you|what\s+can\s+you\s+do|help)\b/i.test(
+        trimmedMessage
+      ) || trimmedMessage.length <= 15;
+
+    if (isPromptInjection || (!isLikelyAcademic && !isGreetingOrPolite)) {
+      return NextResponse.json(
+        successResponse({
+          message:
+            "I can only help with deadlines, conflicts, and study plans. Ask about what's due, conflicts, or your weekly schedule.",
+          intent: "general",
+        }),
+        { status: 200 }
+      );
+    }
+
+    const [courses, assessments, studyBlocks] = await Promise.all([
       getUserCourses(userId),
       getUserAssessments(userId),
+      getUserStudyBlocks(userId),
     ]);
 
     const approvedAssessments = assessments.filter(
       (a) => a.review_state === "approved"
     );
+
+    // Get upcoming study blocks (approved or proposed)
+    const now = new Date();
+    const upcomingStudyBlocks = studyBlocks
+      .filter((block) => new Date(block.start_at) > now)
+      .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+      .slice(0, 10); // Limit to next 10 blocks
+
+    // Detect conflicts
+    const majorAssessments = approvedAssessments.filter(
+      (a) => a.is_major && a.due_at
+    );
+    let conflictWindows: any[] = [];
+    if (majorAssessments.length >= 2) {
+      const conflictResult = await detectConflicts(majorAssessments);
+      conflictWindows = conflictResult.conflicts;
+    }
 
     const context = {
       courses: courses.map((c) => ({
@@ -47,11 +96,45 @@ export async function POST(request: NextRequest) {
         due_at: a.due_at,
         is_major: a.is_major,
       })),
+      study_blocks: upcomingStudyBlocks.map((block) => {
+        const assessment = approvedAssessments.find((a) => a.id === block.assessment_id);
+        return {
+          id: block.id,
+          assessment_title: assessment?.title || "Study session",
+          start_at: block.start_at,
+          end_at: block.end_at,
+          state: block.state,
+        };
+      }),
+      conflicts: conflictWindows.map((conflict) => ({
+        start_date: conflict.start_date,
+        end_date: conflict.end_date,
+        assessment_count: conflict.assessment_ids?.length || 0,
+        severity: conflict.severity,
+      })),
       assessment_count: approvedAssessments.length,
       course_count: courses.length,
+      study_block_count: upcomingStudyBlocks.length,
+      conflict_count: conflictWindows.length,
     };
 
-    const analysis = await processNaturalLanguage(message.trim(), context, history);
+    let analysis;
+    try {
+      analysis = await processNaturalLanguage(trimmedMessage, context, history);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("content_filter") || msg.includes("content management policy")) {
+        return NextResponse.json(
+          successResponse({
+            message:
+              "I can only help with deadlines, conflicts, and study plans. Ask about what's due, conflicts, or your weekly schedule.",
+            intent: "general",
+          }),
+          { status: 200 }
+        );
+      }
+      throw err;
+    }
 
     const responseData: ChatResponseData = {
       message: analysis.reply,
@@ -108,6 +191,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(successResponse(responseData));
   } catch (error) {
     logError("Chat processing", error);
+    if (error instanceof Error) {
+      const message = error.message || "";
+      if (
+        message.includes("fetch failed") ||
+        message.includes("Connect Timeout") ||
+        message.includes("UND_ERR_CONNECT_TIMEOUT")
+      ) {
+        return NextResponse.json(
+          successResponse({
+            message:
+              "I'm having trouble reaching the AI service right now. Please try again in a minute.",
+            intent: "general",
+          }),
+          { status: 200 }
+        );
+      }
+    }
     return NextResponse.json(
       errorResponse("Failed to process message"),
       { status: 500 }

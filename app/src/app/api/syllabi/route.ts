@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractFromDocument } from "@/lib/ai-foundry";
 import { successResponse, errorResponse, logError, getErrorMessage } from "@/lib/utils";
-import { proposals } from "@/lib/proposals-store";
+import { createProposal, updateProposal, getProposal, generateDocumentHash, getCourseByHash } from "@/lib/cosmos";
 import { requireUserId } from "@/lib/auth-session";
 import type { Proposal } from "@/types";
 
@@ -52,6 +52,24 @@ export async function POST(request: NextRequest) {
     // Generate proposal ID
     const proposalId = crypto.randomUUID();
 
+    // Read file buffer early for hash + extraction
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Deduplication: check if this exact file was already uploaded
+    const fileHash = generateDocumentHash(buffer);
+    const existingCourse = await getCourseByHash(userId, fileHash);
+    if (existingCourse) {
+      return NextResponse.json(
+        successResponse({
+          duplicate: true,
+          existingCourseId: existingCourse.id,
+          message: `This syllabus has already been uploaded (${existingCourse.name}).`,
+        }),
+        { status: 409 }
+      );
+    }
+
     // Store initial proposal state
     const initialProposal: Proposal = {
       id: proposalId,
@@ -61,17 +79,16 @@ export async function POST(request: NextRequest) {
       created_at: new Date().toISOString(),
     };
     
-    proposals.set(proposalId, initialProposal);
+    await createProposal(initialProposal);
 
     // Start async extraction (don't await - return immediately)
-    processExtraction(proposalId, file, userId).catch((error) => {
+    // Pass pre-read buffer to avoid re-reading
+    processExtraction(proposalId, file, userId, buffer).catch((error) => {
       logError("Extraction processing", error);
-      const failedProposal: Proposal = {
-        ...initialProposal,
+      updateProposal(proposalId, userId, {
         status: "failed",
         error: getErrorMessage(error),
-      };
-      proposals.set(proposalId, failedProposal);
+      }).catch((dbErr) => logError("Update proposal failure in catch", dbErr));
     });
 
     // Return immediate acknowledgment (latency mask)
@@ -90,24 +107,31 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function processExtraction(proposalId: string, file: File, userId: string) {
+async function processExtraction(proposalId: string, file: File, userId: string, preReadBuffer?: Buffer) {
   try {
     console.log('[Extraction] 🚀 Starting for proposal:', proposalId);
     console.log('[Extraction] File:', file.name, file.type, file.size, 'bytes');
     
-    // Read file content
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    console.log('[Extraction] ✅ Buffer created, size:', buffer.length);
+    // Read file content (use pre-read buffer if available from dedup check)
+    const buffer = preReadBuffer ?? Buffer.from(await file.arrayBuffer());
+    console.log('[Extraction] ✅ Buffer ready, size:', buffer.length);
     
-    // Extract text from PDF
+    // Extract text from document
     let documentContent: string;
     if (file.type === 'application/pdf') {
       console.log('[Extraction] 📄 PDF detected, extracting text...');
       const { extractAndCleanPDF } = await import('@/lib/pdf-extractor');
       documentContent = await extractAndCleanPDF(buffer);
       console.log('[Extraction] ✅ Text extracted, length:', documentContent.length);
+    } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      console.log('[Extraction] 📝 DOCX detected, extracting via mammoth...');
+      const mammoth = await import('mammoth');
+      const { value } = await mammoth.extractRawText({ buffer });
+      documentContent = value;
+      console.log('[Extraction] ✅ DOCX text extracted, length:', documentContent.length);
     } else {
+      // Legacy .doc — best-effort UTF-8 (usually unreadable; user warned in UI)
+      console.log('[Extraction] ⚠️ Legacy .doc format — attempting UTF-8 fallback...');
       documentContent = buffer.toString('utf-8');
     }
 
@@ -121,12 +145,8 @@ async function processExtraction(proposalId: string, file: File, userId: string)
     console.log('[Extraction] ✅ AI extraction complete, found', extractionResult.assessments.length, 'assessments');
 
     // Map extraction result to proposal format
-    const completedProposal: Proposal = {
-      id: proposalId,
-      user_id: userId,
-      filename: file.name,
+    const completedProposal: Partial<Proposal> = {
       status: "completed",
-      created_at: proposals.get(proposalId)?.created_at || new Date().toISOString(),
       course: extractionResult.course,
       assessments: extractionResult.assessments.map((a) => ({
         id: crypto.randomUUID(),
@@ -143,20 +163,19 @@ async function processExtraction(proposalId: string, file: File, userId: string)
       tier_used: extractionResult.tier_used,
       aggregate_confidence: extractionResult.aggregate_confidence,
     };
-
-    proposals.set(proposalId, completedProposal);
+ 
+    await updateProposal(proposalId, userId, completedProposal);
     console.log('[Extraction] ✅ Proposal completed');
   } catch (error) {
     console.error('[Extraction] ❌ Failed:', error);
     logError(`Extraction for proposal ${proposalId}`, error);
-    const failedProposal: Proposal = {
-      id: proposalId,
-      user_id: userId,
-      filename: file.name,
-      status: "failed",
-      created_at: proposals.get(proposalId)?.created_at || new Date().toISOString(),
-      error: getErrorMessage(error),
-    };
-    proposals.set(proposalId, failedProposal);
+    try {
+      await updateProposal(proposalId, userId, {
+        status: "failed",
+        error: getErrorMessage(error),
+      });
+    } catch (dbError) {
+      logError("Failed to update proposal failure status", dbError);
+    }
   }
 }

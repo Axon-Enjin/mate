@@ -11,10 +11,15 @@ export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [duplicateInfo, setDuplicateInfo] = useState<{
+    message: string;
+    existingCourseId: string;
+  } | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0]);
+      setDuplicateInfo(null);
     }
   };
 
@@ -40,6 +45,7 @@ export default function UploadPage() {
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
       ) {
         setFile(droppedFile);
+        setDuplicateInfo(null);
       }
     }
   };
@@ -48,6 +54,7 @@ export default function UploadPage() {
     if (!file || isUploading) return;
 
     setIsUploading(true);
+    setDuplicateInfo(null);
 
     try {
       const formData = new FormData();
@@ -57,6 +64,17 @@ export default function UploadPage() {
         method: "POST",
         body: formData,
       });
+
+      // 409 = duplicate upload
+      if (response.status === 409) {
+        const data = await response.json();
+        setDuplicateInfo({
+          message: data?.data?.message ?? "This syllabus has already been uploaded.",
+          existingCourseId: data?.data?.existingCourseId ?? "",
+        });
+        setIsUploading(false);
+        return;
+      }
 
       if (!response.ok) {
         throw new Error("Upload failed");
@@ -96,6 +114,29 @@ export default function UploadPage() {
             Mate extracts every deadline, flags conflicts, and prepares your weekly plan.
           </p>
         </div>
+
+        {/* Duplicate Upload Banner */}
+        {duplicateInfo && (
+          <div className="mb-6 bg-amber-50 border border-amber-300 rounded-lg p-4 flex items-start gap-3">
+            <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-800">{duplicateInfo.message}</p>
+              <button
+                onClick={() => router.push("/dashboard")}
+                className="mt-2 text-sm font-semibold text-amber-700 underline hover:text-amber-900"
+              >
+                View deadlines on dashboard →
+              </button>
+            </div>
+            <button onClick={() => setDuplicateInfo(null)} className="text-amber-500 hover:text-amber-700">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
 
         {!session && status !== "loading" ? (
           <div className="bg-surface border border-border rounded-lg shadow-sm p-6 sm:p-8 text-center">
@@ -168,6 +209,11 @@ export default function UploadPage() {
                       <p className="text-sm text-text-muted">
                         {(file.size / 1024).toFixed(1)} KB
                       </p>
+                      {file.type.includes("wordprocessingml") && (
+                        <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-1 mt-1">
+                          ⚠️ Word documents may extract less accurately than PDF. For best results, export to PDF first.
+                        </p>
+                      )}
                       <button
                         type="button"
                         onClick={(e) => {

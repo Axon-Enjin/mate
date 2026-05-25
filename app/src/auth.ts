@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 
-const scope = "openid profile email User.Read Calendars.ReadWrite offline_access";
+const scope = "openid profile email User.Read Calendars.ReadWrite Chat.ReadWrite ChatMessage.Send OnlineMeetings.ReadWrite offline_access";
 const tenantId = process.env.AZURE_AD_TENANT_ID;
 const tokenEndpoint = tenantId
   ? `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`
@@ -82,8 +82,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.idToken = account.id_token;
       }
 
-      const accessTokenExpires = token.accessTokenExpires as number | undefined;
-      if (accessTokenExpires && Date.now() < accessTokenExpires - 60_000) {
+      const expires = token.accessTokenExpires as number;
+      if (expires && Date.now() < expires - 60_000) {
         return token;
       }
 

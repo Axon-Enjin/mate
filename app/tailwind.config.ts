@@ -24,6 +24,37 @@ const config: Config = {
         success: "#1E6F5C",
         warning: "#B8860B",
         error: "#B23A2F",
+        // Additional calendar colors
+        blue: {
+          50: "#EFF6FF",
+          200: "#BFDBFE",
+          500: "#3B82F6",
+          700: "#1D4ED8",
+        },
+        purple: {
+          50: "#FAF5FF",
+          200: "#E9D5FF",
+          500: "#A855F7",
+          700: "#7E22CE",
+        },
+        amber: {
+          50: "#FFFBEB",
+          200: "#FDE68A",
+          500: "#F59E0B",
+          700: "#B45309",
+        },
+        rose: {
+          50: "#FFF1F2",
+          200: "#FECDD3",
+          500: "#F43F5E",
+          700: "#BE123C",
+        },
+        teal: {
+          50: "#F0FDFA",
+          200: "#99F6E4",
+          500: "#14B8A6",
+          700: "#0F766E",
+        },
       },
       fontFamily: {
         sans: ["var(--font-sans)", "Inter", "system-ui", "sans-serif"],
