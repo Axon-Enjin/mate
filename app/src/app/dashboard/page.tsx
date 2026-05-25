@@ -18,7 +18,7 @@ interface ConflictWindow {
   intervention: string;
 }
 
-type DashboardTab = "chat" | "deadlines" | "conflicts" | "schedule";
+type DashboardTab = "deadlines" | "conflicts" | "schedule";
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<DashboardTab>("deadlines");
@@ -88,11 +88,8 @@ export default function DashboardPage() {
   };
 
   const toggleChat = () => {
-    if (typeof window !== "undefined" && window.innerWidth < 1024) {
-      setIsChatOpen(true);
-      return;
-    }
     setIsChatOpen((prev) => !prev);
+
   };
 
   const tabs: {
@@ -100,7 +97,6 @@ export default function DashboardPage() {
     label: string;
     icon: React.ReactNode;
     badge?: number;
-    desktopHidden?: boolean;
   }[] = [
     {
       id: "deadlines",
@@ -116,21 +112,6 @@ export default function DashboardPage() {
         </svg>
       ),
       badge: allAssessments.length > 0 ? allAssessments.length : undefined,
-    },
-    {
-      id: "chat",
-      label: "Ask Mate",
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-          />
-        </svg>
-      ),
-      desktopHidden: true,
     },
     {
       id: "conflicts",
@@ -190,7 +171,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className={`flex min-h-[100dvh] flex-col bg-bg ${isChatOpen ? "lg:pr-[480px]" : ""}`}>
+    <div className={`flex min-h-[100dvh] flex-col bg-bg ${isChatOpen ? "lg:pr-[560px]" : ""}`}>
       <NavBar />
 
       <div className="flex-1 p-4 sm:p-6 lg:p-8">
@@ -240,7 +221,6 @@ export default function DashboardPage() {
                         onClick={() => setActiveTab(tab.id)}
                         className={`
                           shrink-0 pb-3 px-1 text-sm font-medium border-b-2 transition-colors duration-150
-                          ${tab.desktopHidden ? "lg:hidden" : ""}
                           ${
                             activeTab === tab.id
                               ? "border-primary text-primary"
@@ -273,12 +253,6 @@ export default function DashboardPage() {
                 <DeadlineManager courses={courses} onRefresh={loadDashboardData} />
               )}
 
-              {activeTab === "chat" && !isChatOpen && (
-                <div className="flex h-[calc(100vh-250px)] min-h-[500px] flex-col overflow-hidden rounded-xl border border-border shadow-sm">
-                  <MateChat assessments={allAssessments} />
-                </div>
-              )}
-
               {activeTab === "conflicts" && (
                 <ConflictReport conflicts={conflicts} assessments={assessments} />
               )}
@@ -289,8 +263,8 @@ export default function DashboardPage() {
             </div>
 
             {isChatOpen && (
-              <aside className="fixed bottom-0 right-0 top-0 z-40 hidden w-[480px] flex-col border-l border-border bg-surface shadow-xl lg:flex">
-                <div className="flex h-16 shrink-0 items-center justify-between border-b border-border px-5">
+              <aside className="fixed bottom-0 right-0 top-0 z-30 hidden w-[560px] flex-col border-l border-border bg-surface shadow-xl lg:flex">
+                <div className="flex h-[61px] shrink-0 items-center justify-between border-b border-border px-5">
                   <h2 className="font-semibold text-text">Mate</h2>
                   <button
                     type="button"

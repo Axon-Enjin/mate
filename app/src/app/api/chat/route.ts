@@ -26,6 +26,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const trimmedMessage = message.trim();
+    const isPromptInjection =
+      /\bignore (all|any|previous|prior) instructions\b/i.test(trimmedMessage) ||
+      /\b(system|developer) prompt\b/i.test(trimmedMessage) ||
+      /\bdeveloper message\b/i.test(trimmedMessage) ||
+      /\bjailbreak\b/i.test(trimmedMessage) ||
+      /\bprompt injection\b/i.test(trimmedMessage) ||
+      /\breveal (the )?(prompt|instructions)\b/i.test(trimmedMessage) ||
+      /\bbypass (the )?rules\b/i.test(trimmedMessage);
+
+    const isLikelyAcademic =
+      /\b(deadline|due|syllabus|schedule|exam|quiz|project|assignment|assessment|conflict|study|plan|week|semester|class|course)\b/i.test(
+        trimmedMessage
+      );
+
+    if (isPromptInjection || !isLikelyAcademic) {
+      return NextResponse.json(
+        successResponse({
+          message:
+            "I can only help with deadlines, conflicts, and study plans. Ask about what's due, conflicts, or your weekly schedule.",
+          intent: "general",
+        }),
+        { status: 200 }
+      );
+    }
+
     const [courses, assessments] = await Promise.all([
       getUserCourses(userId),
       getUserAssessments(userId),
@@ -51,7 +77,23 @@ export async function POST(request: NextRequest) {
       course_count: courses.length,
     };
 
-    const analysis = await processNaturalLanguage(message.trim(), context, history);
+    let analysis;
+    try {
+      analysis = await processNaturalLanguage(trimmedMessage, context, history);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("content_filter") || msg.includes("content management policy")) {
+        return NextResponse.json(
+          successResponse({
+            message:
+              "I can only help with deadlines, conflicts, and study plans. Ask about what's due, conflicts, or your weekly schedule.",
+            intent: "general",
+          }),
+          { status: 200 }
+        );
+      }
+      throw err;
+    }
 
     const responseData: ChatResponseData = {
       message: analysis.reply,
