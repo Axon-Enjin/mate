@@ -1,8 +1,8 @@
 # Mate - Autonomous Academic Orchestrator
 
 **KPMG Academic Innovation Challenge 2026**  
-**Milestone:** M1 — Reasoning + approval E2E (in progress)  
-**Demo Submission:** 2026-05-25
+**Milestone:** M2 complete — final polish in progress; submission deadline **2026-05-26 12:00 noon** (extended)  
+**Last updates:** Outlook calendar sync + Teams reminder integration shipping before deadline
 
 ---
 
@@ -129,8 +129,14 @@ CONFIDENCE_THRESHOLD=0.75
 | DELETE | `/api/assessments/[id]` | Remove a single deadline |
 | GET | `/api/conflicts` | Detect deadline conflicts across approved assessments |
 | POST | `/api/schedule` | Generate study blocks from availability input |
+| PATCH/DELETE | `/api/schedule/[blockId]` | Edit or remove an individual study block |
+| GET/POST | `/api/schedule/reminders` | List or create reminders for upcoming study blocks |
+| POST | `/api/schedule/remind/action` | Handle a reminder action (snooze, mark done, etc.) |
 | GET | `/api/calendar/events` | Fetch Outlook calendar events (Microsoft Graph) |
+| POST | `/api/calendar/events/sync` | Sync approved study blocks into the user's Outlook calendar |
 | POST | `/api/calendar/availability` | Free/busy lookup via Microsoft Graph |
+| POST | `/api/teams/reminder` | Send a study-block reminder to the user via Microsoft Teams |
+| POST | `/api/webhooks/study-block` | Inbound webhook for study-block lifecycle events (reminder triggers) |
 
 ---
 
@@ -193,11 +199,12 @@ Design tokens and chat UI spec: [`docs/dsd-mate.md`](../docs/dsd-mate.md) §4 (C
 - ✅ Dashboard with tabbed navigation
 - ✅ **Deadlines tab** — view/edit/remove deadlines grouped by syllabus (`DeadlineManager`)
 - [ ] Re-upload dedupe (same filename warning)
-- [ ] Manual entry fallback when extraction fails
-- [ ] Outlook calendar wired into schedule planner (Graph APIs exist)
+- [x] Manual entry fallback when extraction fails (`src/components/ManualEntryForm.tsx`)
+- [x] Outlook calendar wired into schedule planner (`/api/calendar/events/sync`, `/api/calendar/availability`)
+- [x] Microsoft Teams reminder integration (`src/lib/microsoft-teams.ts`, `/api/teams/reminder`, `/api/webhooks/study-block`)
+- [x] Extraction accuracy harness (`app/qa/run-accuracy.ts` + `app/qa/corpus/*.json`)
 - [ ] DOC/DOCX support
 - [ ] Mobile polish (375px pass)
-- [ ] Extraction accuracy harness (`qa/` corpus)
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Owner:** [Axon Enjin](https://github.com/Axon-Enjin)  
 **Competition:** [KPMG Academic Innovation Challenge 2026](KPMG.md)  
-**Submission deadline:** 2026-05-25
+**Submission deadline:** 2026-05-26 12:00 noon (extended from 2026-05-25) — **final polish in progress**
 
 Mate is an autonomous academic assistant for Filipino university students. Upload a syllabus once; Mate extracts every deadline, flags weeks where major requirements collide, and proposes realistic study blocks around the student's real availability — driven by natural-language requests like *"help me plan my week."*
 
@@ -130,7 +130,7 @@ Mate's differentiator is **zero-setup autonomy plus conflict reasoning**: it orc
 
 | Milestone | Date |
 |-----------|------|
-| Submission (demo video) | **2026-05-25** |
+| Submission (demo video) | **2026-05-26 12:00 noon** (extended; in progress) |
 | Finalists announced | 2026-05-29 |
 | Final challenge | 2026-06-08 |
 | Demo Day | 2026-06-15 |

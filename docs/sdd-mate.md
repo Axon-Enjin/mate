@@ -1,7 +1,7 @@
 # System Design Document (SDD)
 
 **Project:** Mate — Autonomous Academic Orchestrator
-**Date:** 2026-05-19
+**Date:** 2026-05-19 (last spec revision); updated 2026-05-26 11:55 (deadline extended to 12:00 noon)
 **Version:** 0.2
 **Owner:** Axon Enjin
 **PRD:** [prd-mate.md](prd-mate.md)
@@ -23,7 +23,7 @@
 - **ICS-feed LMS sync before deep APIs.** Canvas/Moodle full API access is a 6–18 month per-institution relationship; per-user ICS is zero-admin and ships first. Documented debt: ICS is read-only and polling-based.
 - **No background job queue for v1.** The ~10–20s parse runs inline behind a latency-mask, not a queue; a queue is added before thousands of concurrent users.
 - **Single region (Azure SEA) for v1.** PH data-localization is satisfied by one SEA region; multi-region is post-scale.
-- **Integration breadth phased.** Demo proves the core flow; Microsoft 365 (Teams/Outlook/Graph) and Google Workspace (Calendar/Classroom/Drive) connectors are Should-Have, layered after the judged capabilities are solid.
+- **Integration breadth phased.** Demo proves the core flow; Microsoft 365 (Teams/Outlook/Graph) and Google Workspace (Calendar/Classroom/Drive) connectors are Should-Have, layered after the judged capabilities are solid. *(Updated 2026-05-26: the M365 connectors have started landing — `microsoft-graph.ts` powers Outlook calendar availability + event sync via `/api/calendar/*`, and `microsoft-teams.ts` powers Teams reminders via `/api/teams/reminder` and `/api/webhooks/study-block`. Google Workspace is still deferred.)*
 - **Demo persists to a disposable store.** The demo uses the real Cosmos DB schema in a non-production instance with a limited, consenting pilot dataset — not session-only mocks — so the demo is genuinely the v1 foundation.
 - **Demo runs on dev/test-licensed Azure (MLSA / Visual Studio Enterprise subscription).** The competition demo is hosted on a teammate's Microsoft Learn Student Ambassador Visual Studio Enterprise subscription (monthly Azure dev/test credit) and an associated Microsoft 365 developer tenant for Graph/Teams/Outlook integration development. **This is dev/test-licensed — it must not host production or any public/paying workload, and production identity/billing must not depend on a personal ambassador account** (bus-factor + ToS + DPA data-controller risk). Documented debt: commercial v1 requires migration to a separate, org-owned, commercially-licensed Azure subscription (e.g., Azure for Startups / Founders Hub) and an org-owned tenant before any public or paying user — planned as a migration, not a lift-and-keep.
 
@@ -42,7 +42,7 @@ graph TD
     Orch -->|conflict + schedule reasoning| GPT[OpenAI GPT-4.1]
     API --> Cosmos[(Azure Cosmos DB - SEA region)]
     API --> Redis[(Azure Cache for Redis)]
-    API -.Should-Have.-> M365[Microsoft 365: Graph - Outlook, Teams, Calendar]
+    API -->|Outlook calendar + Teams reminders shipped 2026-05-26| M365[Microsoft 365: Graph - Outlook, Teams, Calendar]
     API -.Should-Have.-> GW[Google Workspace: Calendar, Classroom, Drive]
     API -.Should-Have.-> LMS[Canvas / Moodle ICS feeds]
     M365 -. embed .-> Cards[Adaptive Card render in Teams/Outlook]

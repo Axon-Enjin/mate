@@ -1,17 +1,17 @@
 # Product Requirements Document (PRD)
 
 **Project:** Mate — Autonomous Academic Orchestrator
-**Date:** 2026-05-19
+**Date:** 2026-05-19 (last spec revision); status updated 2026-05-26 11:55 (deadline extended to 12:00 noon today)
 **Version:** 0.5
 **Owner:** Axon Enjin
-**Status:** Draft
+**Status:** Final polish — submission deadline = 2026-05-26 12:00 noon; M0/M1/M2 complete; Should-Have M365 items shipping in final hours (see §3, §9)
 **BRD:** [brd-mate.md](brd-mate.md)
 
 ---
 
 ## 1. Product Purpose & Value Proposition
 
-Mate is an autonomous academic assistant that turns a student's static, scattered course documents into an active, adaptive study strategy. A student uploads their syllabi; Mate extracts every deadline, reasons about where workload collides, and proposes realistic study blocks around the student's real availability — all driven by natural-language requests like "help me plan my week." It is built for Filipino university students who juggle multiple syllabi, jobs, and long commutes, and who abandon every planner on the market because the planner demands the very executive function they lack. Mate's differentiator is **zero-setup autonomy plus conflict reasoning**: it doesn't just list tasks, it orchestrates the semester and flags the week three majors are due before the student walks into it. Mate is an **independent SaaS** — its own web/PWA application, backend, and data store — **powered by Microsoft Copilot** as its AI engine. The immediate deliverable is the Copilot-powered Mate SaaS demonstrated for the KPMG Academic Innovation Challenge (due 2026-05-25); the competition organizer has confirmed an independent SaaS powered by Copilot is acceptable (the brief's "Primary Platform: Copilot Studio" means Copilot is the primary AI, not that the product must live inside Copilot Studio). The same SaaS scales commercially — Azure-hosted but ecosystem-agnostic at the integration layer, supporting both **Microsoft 365 (Teams, Outlook, Microsoft Graph)** and **Google Workspace (Calendar, Classroom, Drive)** — into a Filipino-priced, LMS-integrated academic operating system.
+Mate is an autonomous academic assistant that turns a student's static, scattered course documents into an active, adaptive study strategy. A student uploads their syllabi; Mate extracts every deadline, reasons about where workload collides, and proposes realistic study blocks around the student's real availability — all driven by natural-language requests like "help me plan my week." It is built for Filipino university students who juggle multiple syllabi, jobs, and long commutes, and who abandon every planner on the market because the planner demands the very executive function they lack. Mate's differentiator is **zero-setup autonomy plus conflict reasoning**: it doesn't just list tasks, it orchestrates the semester and flags the week three majors are due before the student walks into it. Mate is an **independent SaaS** — its own web/PWA application, backend, and data store — **powered by Microsoft Copilot** as its AI engine. The immediate deliverable is the Copilot-powered Mate SaaS demonstrated for the KPMG Academic Innovation Challenge (submission deadline **2026-05-26 12:00 noon**, extended); the competition organizer has confirmed an independent SaaS powered by Copilot is acceptable (the brief's "Primary Platform: Copilot Studio" means Copilot is the primary AI, not that the product must live inside Copilot Studio). The same SaaS scales commercially — Azure-hosted but ecosystem-agnostic at the integration layer, supporting both **Microsoft 365 (Teams, Outlook, Microsoft Graph)** and **Google Workspace (Calendar, Classroom, Drive)** — into a Filipino-priced, LMS-integrated academic operating system.
 
 ---
 
@@ -30,7 +30,7 @@ Mate is an autonomous academic assistant that turns a student's static, scattere
 
 ## 3. Core Features & Priorities
 
-Layered scope: **Must-Have = the KPMG competition demo MVP (Copilot Studio, due 2026-05-25).** Should/Could/Won't = the broader commercial product from the market research, intentionally deferred.
+Layered scope: **Must-Have = the KPMG competition demo MVP (submission deadline 2026-05-26 12:00 noon, extended).** Should/Could/Won't = the broader commercial product from the market research, intentionally deferred.
 
 | Feature | Description | Priority |
 |---------|-------------|----------|
@@ -42,7 +42,7 @@ Layered scope: **Must-Have = the KPMG competition demo MVP (Copilot Studio, due 
 | Consolidated dashboard | Single consolidated, interactive view of extracted deadlines in Mate's own UI (and renderable as an Adaptive Card when surfaced in Teams/Outlook) | Must-Have |
 | Latency-masking feedback | Proactive async progress feedback in Mate's UI while heavy AI extraction runs in the background | Must-Have |
 | Confidence-scored extraction + transparency toggle | Low-confidence items are visually flagged as "needs review"; a UI toggle reveals raw ML probability metrics | Should-Have |
-| Microsoft 365 integration | Two-way sync with Microsoft Graph — Outlook calendar, Teams notifications/embeds, Outlook tasks | Should-Have |
+| Microsoft 365 integration | Two-way sync with Microsoft Graph — Outlook calendar, Teams notifications/embeds, Outlook tasks | Should-Have **(partially shipped 2026-05-26: Outlook calendar availability + event sync, Teams reminder webhook)** |
 | Google Workspace integration | Two-way sync with Google Calendar; Google Classroom course/deadline import; Drive document pickup | Should-Have |
 | LMS integration (Canvas + Moodle) | Per-user ICS feed sync first; deep API integration as university partnerships mature | Should-Have |
 | Filipino / Taglish UI & tone | Localized strings and code-switch-aware agent responses | Should-Have |
@@ -232,11 +232,11 @@ Ingests a syllabus document, extracts course name, assessments, and due dates in
 
 | # | Phase / Milestone | Entry criteria | Exit criteria (Definition of Done) | Deliverable | Depends on | Owner (DRI) | Top risk |
 |---|-------------------|----------------|-------------------------------------|-------------|------------|-------------|----------|
-| M0 | SaaS scaffolded | PRD approved | Mate SaaS app (web/PWA + backend) live; Copilot wired as AI engine; syllabus upload → structured extraction renders in Mate's UI | Working ingestion path (target 2026-05-20) | — | Axon Enjin | Copilot/Azure OpenAI integration latency or quota |
-| M1 | Reasoning + approval | M0 complete | Conflict reasoning + adaptive scheduling + batch human approval working end-to-end in the SaaS | Feature-complete demo build (target 2026-05-23) | M0 | Axon Enjin | Extraction accuracy on real PH syllabi |
-| M2 | Demo prepared | M1 complete | Working SaaS demo + recorded walkthrough show latency masking + zero-setup flow, both judged criteria evident | Demo build + recorded walkthrough (target 2026-05-24) | M1 | Axon Enjin | Latency visible / flow feels slow on camera |
-| Launch | Competition submission | M2 complete | Submission (demo video) sent to KPMG contacts | KPMG submission (2026-05-25) | M2 | Axon Enjin | Missed submission window |
-| Post-comp v1 | Commercial scale-up | Competition closed | Microsoft 365 + Google Workspace integrations, native clients on the same Mate API, first external users | Commercial v1 (TBD) | Launch | Axon Enjin | Integration breadth slows v1; scale assumptions wrong |
+| M0 | SaaS scaffolded | PRD approved | Mate SaaS app (web/PWA + backend) live; Copilot wired as AI engine; syllabus upload → structured extraction renders in Mate's UI | Working ingestion path (2026-05-20 — **shipped**) | — | Axon Enjin | Copilot/Azure OpenAI integration latency or quota |
+| M1 | Reasoning + approval | M0 complete | Conflict reasoning + adaptive scheduling + batch human approval working end-to-end in the SaaS | Feature-complete demo build (2026-05-23 — **shipped**, incl. `MateChat`, `DeadlineManager`, conflict + schedule UIs) | M0 | Axon Enjin | Extraction accuracy on real PH syllabi |
+| M2 | Demo prepared | M1 complete | Working SaaS demo + recorded walkthrough show latency masking + zero-setup flow, both judged criteria evident | Demo build + recorded walkthrough (2026-05-24/25 — **shipped**, plus manual-entry fallback `ManualEntryForm` and QA accuracy harness `app/qa/`) | M1 | Axon Enjin | Latency visible / flow feels slow on camera |
+| Launch | Competition submission | M2 complete | Submission (demo video) sent to KPMG contacts | KPMG submission (**2026-05-26 12:00 noon — deadline extended, final polish in progress**) | M2 | Axon Enjin | Last-minute bugs; Outlook/Teams integrations shipping in final hours |
+| Post-comp v1 | Commercial scale-up | Competition closed | Microsoft 365 + Google Workspace integrations, native clients on the same Mate API, first external users | Commercial v1 (TBD) — **already started**: Outlook calendar sync + Teams reminder webhook landing 2026-05-26 before submission deadline | Launch | Axon Enjin | Integration breadth slows v1; scale assumptions wrong |
 
 **Rollout strategy:** controlled single-environment deploy for the competition demo (limited/no external audience); phased / feature-flag for commercial v1 — *reason: the competition deliverable is the working SaaS shown to judges, not yet a public multi-user release, so there is no audience to ramp; the commercial product ramps PH-first per [gtm-mate.md](gtm-mate.md).*
 

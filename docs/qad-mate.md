@@ -1,7 +1,7 @@
 # QA & Test Plan (QAD)
 
 **Project:** Mate — Autonomous Academic Orchestrator
-**Date:** 2026-05-19
+**Date:** 2026-05-19 (last spec revision); updated 2026-05-26 11:55 (deadline extended to 12:00 noon)
 **Version:** 0.2
 **Owner:** Axon Enjin
 **PRD:** [prd-mate.md](prd-mate.md)
@@ -9,7 +9,7 @@
 
 ---
 
-> **Context:** "Launch" for this plan = the **KPMG demo + submission gate (2026-05-25)**, not a public production release. The deliverable is the deployed independent Mate SaaS (Copilot-powered) shown to judges + a recorded walkthrough — not a Copilot Studio bot. The competition is judged 50% Functionality/UX and 50% Data Accuracy & Relevance, so extraction accuracy is treated as a launch-blocking concern, not a nice-to-have. v1-production QA at scale (load, high concurrency, full integration matrix) is registered but out of scope for this competition gate.
+> **Context:** "Launch" for this plan = the **KPMG demo + submission gate (2026-05-26 12:00 noon — deadline extended)**, not a public production release. This QAD is the binding spec for what must pass before submission. The deliverable is the deployed independent Mate SaaS (Copilot-powered) shown to judges + a recorded walkthrough — not a Copilot Studio bot. The competition is judged 50% Functionality/UX and 50% Data Accuracy & Relevance, so extraction accuracy is treated as a launch-blocking concern, not a nice-to-have. v1-production QA at scale (load, high concurrency, full integration matrix) is registered but out of scope for this competition gate.
 
 ## 1. Testing Strategy & Scope
 
@@ -20,7 +20,7 @@
 
 **Out of Scope (this gate):**
 - Multi-user / concurrency / load testing at scale — demo runs a limited pilot cohort.
-- Microsoft 365 / Google Workspace / LMS ICS integrations — Should-Have, deferred to commercial v1.
+- ~~Microsoft 365 / Google Workspace / LMS ICS integrations — Should-Have, deferred to commercial v1.~~ **Updated 2026-05-26:** Microsoft 365 (Outlook calendar availability + event sync, Teams reminder webhook) shipped during the submission window and is now in-scope for smoke verification; Google Workspace and LMS ICS remain deferred to commercial v1.
 - Native iOS/Android/PWA clients — Won't-Have v1.
 - Localization correctness beyond demo-shown Taglish strings.
 
@@ -41,7 +41,7 @@
 **Test credentials:** a small set of consenting pilot identities; data deletable on request (DPA-aware even at demo — see [clr-mate.md](clr-mate.md)).
 **Data policy:** a curated corpus of **representative real PH university syllabi** (text-PDF, scanned/image-only, multi-column, merged-cell tables, "TBA" dates, year-less ranges, conflicting calendar-vs-table dates) — anonymized; **no real student PII** beyond the syllabus documents and pilot accounts. Each fixture has a hand-labeled gold set of `{title, due_at, is_major}`.
 
-**Test data setup:** maintain the corpus + gold labels as fixtures in this repo (e.g., `qa/syllabi/` + `qa/gold/`); the accuracy harness reads gold labels and diffs extraction output. (Directory is a placeholder until the harness ticket `mate-rfc-001-08` lands.)
+**Test data setup (updated 2026-05-26 — harness has landed):** the accuracy harness now lives at `app/qa/run-accuracy.ts`; gold-labeled corpus fixtures live at `app/qa/corpus/*.json` (initial set: `cs-socsci.json`, `multimedia.json` — paired with the source PDFs at `test/CS-SOCSCI-SocSc12-TANGARA_A-F1-2022-1.pdf` and `test/Latest_Multimedia_OBEorOBTLP-Format.pdf`). The harness reads gold labels and diffs extraction output. The original `qa/syllabi/` + `qa/gold/` placeholder layout was superseded; the `app/qa/` location is canonical.
 
 ---
 

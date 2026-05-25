@@ -14,6 +14,8 @@ This is a **monorepo with two concerns**:
 
 `AGENTS.md` is the canonical contributor doc — read it for product framing, source-of-truth precedence, and the FMD docs workflow. Do not duplicate that content here; defer to it.
 
+> **Stale section in `AGENTS.md`:** the "Two Git Repositories" block describes `FMD/` as a nested repo, but `FMD/` has been removed from the working tree (shows as `D FMD` in git status). Ignore that section until `AGENTS.md` is reconciled.
+
 ---
 
 ## Commands (run inside `app/`)
@@ -28,6 +30,8 @@ npm run test:connections  # Smoke-test Cosmos + AI Foundry connectivity (node te
 ```
 
 There is **no test framework configured** — no unit/integration test runner, no `npm test`. The only automated check is `test:connections`. Verify behavior by running the app and walking the demo flow (sign in → upload → review → approve → dashboard).
+
+Canonical syllabus fixtures live at `test/` (repo root): `CS-SOCSCI-SocSc12-TANGARA_A-F1-2022-1.pdf` and `Latest_Multimedia_OBEorOBTLP-Format.pdf`. Use these when verifying extraction or walking the demo flow — they are the same PDFs the team has been validating against.
 
 Node `>=20`, npm `>=10` (enforced in `package.json` engines).
 
@@ -65,6 +69,7 @@ Next.js 16 App Router with React 19 and TypeScript. The full flow is **Upload �
 - **`src/types/index.ts`** — Cosmos schema mirrors (`User`, `Course`, `Assessment`, `StudyBlock`, `IntegrationLink`) plus API request/response shapes. Treat these as the contract between API routes and the UI.
 - **`src/auth.ts`** — NextAuth v5 (beta) with Microsoft Entra ID, JWT session strategy, manual access-token refresh against `login.microsoftonline.com`. `session.user.id` is **always the Entra `sub`**, never email — preserve that invariant.
 - **`src/middleware.ts`** — Gates non-public, non-auth, non-API routes behind sign-in. API routes do their own auth.
+- **`scripts/prompt-guardrails.js`** (repo root) — standalone guardrail/prompt-hardening helper used during chat-flow tuning. Not wired into the Next.js runtime; run directly with `node` when iterating on guardrails.
 
 ### The proposal lifecycle (load-bearing)
 
