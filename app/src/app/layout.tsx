@@ -24,6 +24,10 @@ const fraunces = Fraunces({
 export const metadata: Metadata = {
   title: "Mate — Autonomous Academic Orchestrator",
   description: "Upload your syllabi and Mate reads them, flags deadline conflicts, and builds your study schedule — zero setup.",
+  icons: {
+    icon: "/mascot-mate.svg",
+    shortcut: "/mascot-mate.svg",
+  },
 };
 
 export default function RootLayout({
